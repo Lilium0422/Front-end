@@ -106,8 +106,9 @@ const Header: React.FC = () => {
       <div className="container mx-auto px-4">
         <div className="flex items-center justify-between h-16">
           {/* 로고 */}
-          <Link to="/" className="text-2xl font-bold text-primary">
-            OTT
+          <Link to="/" className="text-2xl font-bold flex items-center">
+            <span className="text-primary">U</span>
+            <span className="text-white">TOPIA</span>
           </Link>
 
           {/* 네비게이션 - 데스크톱 */}
