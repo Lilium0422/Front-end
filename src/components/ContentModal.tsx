@@ -9,7 +9,7 @@ import {
   Info,
   ChevronRight,
 } from "lucide-react";
-import { Content, Episode } from "@/types";
+import { Content } from "@/types";
 import { contentService } from "@/services/contentService";
 import { useAuth } from "@/contexts/AuthContext";
 

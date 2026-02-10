@@ -1,7 +1,6 @@
 import React, { useEffect, useState, useRef } from "react";
 import {
   TrendingUp,
-  Star,
   History,
   Flame,
   ChevronLeft,

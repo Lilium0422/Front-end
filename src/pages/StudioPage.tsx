@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Upload, Video, Image as ImageIcon, Tag, Save } from "lucide-react";
+import { Upload, Video, Image as ImageIcon, Tag } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { SYSTEM_TAGS } from "@/services/mockData";
 
