@@ -22,12 +22,12 @@ const ContentCard: React.FC<ContentCardProps> = ({ content, onCardClick }) => {
   };
 
   return (
-    <div onClick={handleClick} className="card group cursor-pointer">
+    <div onClick={handleClick} className="card cursor-pointer">
       <div className="relative aspect-video overflow-hidden">
         <img
           src={content.thumbnailUrl}
           alt={content.title}
-          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+          className="w-full h-full object-cover hover:scale-105 transition-transform duration-300"
         />
         <div className="absolute bottom-2 right-2 bg-black/80 px-2 py-1 rounded text-xs flex items-center space-x-1">
           <Clock className="w-3 h-3" />
