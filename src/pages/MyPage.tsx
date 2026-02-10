@@ -14,6 +14,7 @@ import { authService } from "@/services/authService";
 import { SYSTEM_TAGS } from "@/services/mockData";
 import { Content, WatchHistory } from "@/types";
 import ContentCard from "@/components/ContentCard";
+import ContentModal from "@/components/ContentModal";
 
 type Tab = "profile" | "bookmarks" | "history" | "stats";
 
@@ -26,6 +27,7 @@ const MyPage: React.FC = () => {
     (WatchHistory & { content: Content })[]
   >([]);
   const [loading, setLoading] = useState(false);
+  const [selectedContent, setSelectedContent] = useState<Content | null>(null);
 
   // 프로필 편집
   const [editMode, setEditMode] = useState(false);
@@ -333,7 +335,11 @@ const MyPage: React.FC = () => {
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
                 {bookmarks.map((content) => (
-                  <ContentCard key={content.id} content={content} />
+                  <ContentCard
+                    key={content.id}
+                    content={content}
+                    onCardClick={setSelectedContent}
+                  />
                 ))}
               </div>
             )}
@@ -452,6 +458,13 @@ const MyPage: React.FC = () => {
           </div>
         )}
       </div>
+
+      {selectedContent && (
+        <ContentModal
+          content={selectedContent}
+          onClose={() => setSelectedContent(null)}
+        />
+      )}
     </div>
   );
 };
