@@ -12,5 +12,12 @@ export default defineConfig({
   server: {
     port: 3000,
     open: false, // 자동으로 브라우저 열지 않음
+    proxy: {
+      "/api": {
+        target: "http://localhost:8081",
+        changeOrigin: true,
+        secure: false,
+      },
+    },
   },
 });

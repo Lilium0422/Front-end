@@ -5,8 +5,7 @@ import axios, {
 } from "axios";
 
 // API Base URL
-export const API_BASE_URL =
-  (import.meta.env.VITE_API_BASE_URL as string) || "http://3.35.115.251:8081";
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL as string;
 
 // Axios 인스턴스 생성
 export const apiClient = axios.create({

@@ -132,19 +132,8 @@ const SignupPage: React.FC = () => {
     e.preventDefault();
     setError("");
 
-    // 닉네임 중복 확인 검증
-    if (!nicknameCheck.checked || !nicknameCheck.isAvailable) {
-      setError("닉네임 중복 확인을 완료해주세요.");
-      return;
-    }
-
     // 이메일 회원가입인 경우 추가 검증
     if (signupMethod === "email") {
-      if (!emailCheck.checked || !emailCheck.isAvailable) {
-        setError("이메일 중복 확인을 완료해주세요.");
-        return;
-      }
-
       if (formData.password !== formData.confirmPassword) {
         setError("비밀번호가 일치하지 않습니다.");
         return;
@@ -156,8 +145,8 @@ const SignupPage: React.FC = () => {
       }
     }
 
-    if (selectedTags.length === 0) {
-      setError("최소 1개 이상의 선호 태그를 선택해주세요.");
+    if (selectedTags.length < 3) {
+      setError("최소 3개 이상의 선호 태그를 선택해주세요.");
       return;
     }
 
@@ -353,45 +342,15 @@ const SignupPage: React.FC = () => {
                   >
                     이메일 *
                   </label>
-                  <div className="flex gap-2">
-                    <div className="flex-1">
-                      <input
-                        id="email"
-                        type="email"
-                        value={formData.email}
-                        onChange={(e) => handleEmailChange(e.target.value)}
-                        required
-                        className="input-field w-full"
-                        placeholder="example@email.com"
-                      />
-                    </div>
-                    <button
-                      type="button"
-                      onClick={handleCheckEmail}
-                      disabled={checkingEmail || !formData.email}
-                      className="btn-secondary whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {checkingEmail ? "확인 중..." : "중복 확인"}
-                    </button>
-                  </div>
-                  {emailCheck.checked && (
-                    <div className="flex items-center gap-2 mt-2">
-                      {emailCheck.isAvailable ? (
-                        <CheckCircle className="w-4 h-4 text-green-500" />
-                      ) : (
-                        <XCircle className="w-4 h-4 text-red-500" />
-                      )}
-                      <p
-                        className={`text-sm ${
-                          emailCheck.isAvailable
-                            ? "text-green-500"
-                            : "text-red-500"
-                        }`}
-                      >
-                        {emailCheck.message}
-                      </p>
-                    </div>
-                  )}
+                  <input
+                    id="email"
+                    type="email"
+                    value={formData.email}
+                    onChange={(e) => handleEmailChange(e.target.value)}
+                    required
+                    className="input-field w-full"
+                    placeholder="example@email.com"
+                  />
                 </div>
 
                 {/* 비밀번호 */}
@@ -449,51 +408,21 @@ const SignupPage: React.FC = () => {
               >
                 닉네임 *
               </label>
-              <div className="flex gap-2">
-                <div className="flex-1">
-                  <input
-                    id="nickname"
-                    type="text"
-                    value={formData.nickname}
-                    onChange={(e) => handleNicknameChange(e.target.value)}
-                    required
-                    className="input-field w-full"
-                    placeholder="닉네임을 입력하세요"
-                  />
-                </div>
-                <button
-                  type="button"
-                  onClick={handleCheckNickname}
-                  disabled={checkingNickname || !formData.nickname}
-                  className="btn-secondary whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {checkingNickname ? "확인 중..." : "중복 확인"}
-                </button>
-              </div>
-              {nicknameCheck.checked && (
-                <div className="flex items-center gap-2 mt-2">
-                  {nicknameCheck.isAvailable ? (
-                    <CheckCircle className="w-4 h-4 text-green-500" />
-                  ) : (
-                    <XCircle className="w-4 h-4 text-red-500" />
-                  )}
-                  <p
-                    className={`text-sm ${
-                      nicknameCheck.isAvailable
-                        ? "text-green-500"
-                        : "text-red-500"
-                    }`}
-                  >
-                    {nicknameCheck.message}
-                  </p>
-                </div>
-              )}
+              <input
+                id="nickname"
+                type="text"
+                value={formData.nickname}
+                onChange={(e) => handleNicknameChange(e.target.value)}
+                required
+                className="input-field w-full"
+                placeholder="닉네임을 입력하세요"
+              />
             </div>
 
             {/* 선호 태그 - 모든 회원가입 방법에 공통 */}
             <div>
               <label className="block text-sm font-medium mb-3">
-                선호 태그 선택 * (최소 1개)
+                선호 태그 선택 * (최소 3개)
               </label>
               <div className="flex flex-wrap gap-2">
                 {SYSTEM_TAGS.map((tag) => (
