@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useCallback } from "react";
 import {
   TrendingUp,
   History,
@@ -27,6 +27,56 @@ const HomePage: React.FC = () => {
   const [selectedContent, setSelectedContent] = useState<Content | null>(null);
   const [chartScrollPosition, setChartScrollPosition] = useState(0);
   const chartContainerRef = useRef<HTMLDivElement>(null);
+  const [hasMore, setHasMore] = useState(true);
+  const observerRef = useRef<IntersectionObserver | null>(null);
+  const loadingMoreRef = useRef(false);
+  const pageRef = useRef(0);
+
+  const loadMoreContents = useCallback(async () => {
+    if (loadingMoreRef.current) return;
+    loadingMoreRef.current = true;
+    try {
+      const nextPage = pageRef.current + 1;
+      const uploaderType =
+        activeTab === "original"
+          ? "ORIGINAL"
+          : activeTab === "creator"
+            ? "CREATOR"
+            : undefined;
+      const newContents = await contentService.getDefaultContentList({
+        uploaderType,
+        page: nextPage,
+        size: 15,
+      });
+      if (newContents.length < 15) {
+        setHasMore(false);
+      }
+      setAllContents((prev) => [...prev, ...newContents]);
+      pageRef.current = nextPage;
+    } catch (error) {
+      console.error("추가 콘텐츠 로딩 실패:", error);
+    } finally {
+      loadingMoreRef.current = false;
+    }
+  }, [activeTab]);
+
+  const loadMoreRef = useCallback(
+    (node: HTMLDivElement | null) => {
+      if (observerRef.current) observerRef.current.disconnect();
+      if (!node) return;
+
+      observerRef.current = new IntersectionObserver(
+        (entries) => {
+          if (entries[0].isIntersecting) {
+            loadMoreContents();
+          }
+        },
+        { threshold: 0.1 },
+      );
+      observerRef.current.observe(node);
+    },
+    [loadMoreContents],
+  );
 
   useEffect(() => {
     loadInitialContents();
@@ -35,11 +85,18 @@ const HomePage: React.FC = () => {
   const loadInitialContents = async () => {
     setLoading(true);
     try {
-      // 기본 콘텐츠 목록 조회
-      const defaultList = await contentService.getDefaultContentList();
+      // 인기 콘텐츠용 (첫 페이지 데이터 활용)
+      const defaultList = await contentService.getDefaultContentList({
+        page: 0,
+        size: 15,
+      });
 
       setAllContents(defaultList);
       setPopularContents(defaultList.slice(0, 10)); // 상위 10개를 인기 콘텐츠로
+      if (defaultList.length < 15) {
+        setHasMore(false);
+      }
+      pageRef.current = 0;
 
       // 사용자 태그 기반 추천 (클라이언트 사이드 필터링)
       if (user && user.preferredTags.length > 0) {
@@ -61,21 +118,46 @@ const HomePage: React.FC = () => {
     }
   };
 
-  // 필터링된 콘텐츠 (클라이언트 사이드 - 즉시 반영)
-  const getFilteredContents = () => {
-    let filtered = [...allContents];
-
-    // 탭 필터링 - 백엔드 accessLevel 기반
-    if (activeTab === "original") {
-      filtered = filtered.filter((c) => c.accessLevel === "ORIGINAL");
-    } else if (activeTab === "creator") {
-      filtered = filtered.filter((c) => c.accessLevel === "CREATOR");
+  // 탭 변경 시 콘텐츠 리셋
+  const isFirstRender = useRef(true);
+  useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
     }
+    setAllContents([]);
+    setHasMore(true);
+    pageRef.current = -1;
+    const loadTabContents = async () => {
+      loadingMoreRef.current = true;
+      try {
+        const uploaderType =
+          activeTab === "original"
+            ? "ORIGINAL"
+            : activeTab === "creator"
+              ? "CREATOR"
+              : undefined;
+        const newContents = await contentService.getDefaultContentList({
+          uploaderType,
+          page: 0,
+          size: 15,
+        });
+        if (newContents.length < 15) {
+          setHasMore(false);
+        }
+        setAllContents(newContents);
+        pageRef.current = 0;
+      } catch (error) {
+        console.error("콘텐츠 로딩 실패:", error);
+      } finally {
+        loadingMoreRef.current = false;
+      }
+    };
+    loadTabContents();
+  }, [activeTab]);
 
-    return filtered;
-  };
-
-  const filteredContents = getFilteredContents();
+  // 필터링된 콘텐츠 — 탭 필터링은 API에서 처리하므로 그대로 사용
+  const filteredContents = allContents;
 
   const handleChartScroll = (direction: "left" | "right") => {
     if (!chartContainerRef.current) return;
@@ -323,6 +405,13 @@ const HomePage: React.FC = () => {
               />
             ))}
           </div>
+
+          {/* 무한스크롤 로딩 트리거 */}
+          {hasMore && (
+            <div ref={loadMoreRef} className="flex justify-center py-8">
+              <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+            </div>
+          )}
 
           {filteredContents.length === 0 && (
             <div className="text-center py-12 text-gray-400">

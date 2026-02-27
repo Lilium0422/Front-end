@@ -25,6 +25,8 @@ export const contentService = {
   getDefaultContentList: async (params?: {
     uploaderType?: string;
     tag?: string;
+    page?: number;
+    size?: number;
   }): Promise<Content[]> => {
     if (USE_MOCK) {
       await new Promise((resolve) => setTimeout(resolve, 300));
