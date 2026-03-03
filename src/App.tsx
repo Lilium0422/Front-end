@@ -12,6 +12,8 @@ import OriginalPage from "./pages/OriginalPage";
 import CreatorPage from "./pages/CreatorPage";
 import StudioPage from "./pages/StudioPage";
 import AdminPage from "./pages/AdminPage";
+import OAuthCallbackPage from "./pages/OAuthCallbackPage";
+import SocialSetupPage from "./pages/SocialSetupPage";
 
 const App: React.FC = () => {
   return (
@@ -29,6 +31,13 @@ const App: React.FC = () => {
         <Route path="/creator" element={<CreatorPage />} />
         <Route path="/studio" element={<StudioPage />} />
         <Route path="/admin" element={<AdminPage />} />
+        {/* OAuth 콜백 라우트 */}
+        <Route
+          path="/oauth/callback/:provider"
+          element={<OAuthCallbackPage />}
+        />
+        {/* 소셜 로그인 후 추가 정보 입력 */}
+        <Route path="/social-setup" element={<SocialSetupPage />} />
       </Routes>
     </div>
   );

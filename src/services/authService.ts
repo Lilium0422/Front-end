@@ -218,4 +218,98 @@ export const authService = {
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(REFRESH_TOKEN_KEY);
   },
+
+  // ══════════════════════════════════════════════════════════════
+  //  소셜 로그인
+  // ══════════════════════════════════════════════════════════════
+
+  /**
+   * 소셜 로그인 (Google, Kakao, Naver)
+   * @returns isNewUser가 true면 setupToken 반환, false면 JWT 반환
+   */
+  socialLogin: async (
+    provider: "google" | "kakao" | "naver",
+    code: string,
+    redirectUri: string,
+    state?: string,
+  ): Promise<{
+    isNewUser: boolean;
+    setupToken?: string;
+    user?: User;
+  }> => {
+    try {
+      const response = await apiClient.post(`/api/auth/login/${provider}`, {
+        code,
+        redirectUri,
+        state,
+      });
+
+      const data = response.data.data;
+
+      if (data.isNewUser) {
+        // 신규 유저 → setupToken 반환
+        return {
+          isNewUser: true,
+          setupToken: data.setupToken,
+        };
+      } else {
+        // 기존 유저 → JWT 저장 후 로그인 완료
+        localStorage.setItem(TOKEN_KEY, data.accessToken);
+        localStorage.setItem(REFRESH_TOKEN_KEY, data.refreshToken);
+
+        // JWT 디코딩해서 사용자 정보 추출 (한글 지원)
+        try {
+          const base64Url = data.accessToken.split(".")[1];
+          const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+          const jsonPayload = decodeURIComponent(
+            atob(base64)
+              .split("")
+              .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+              .join(""),
+          );
+          const payload = JSON.parse(jsonPayload);
+          console.log("JWT 페이로드:", payload); // 디버깅용
+
+          const user: User = {
+            id: payload.sub || "current",
+            email: payload.email || "",
+            nickname: payload.nickname || "사용자",
+            preferredTags: [],
+            subscriptionType: "basic",
+            isLGUPlus: false,
+            joinDate: new Date().toISOString(),
+          };
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
+
+          return {
+            isNewUser: false,
+            user,
+          };
+        } catch (decodeError) {
+          console.error("JWT 디코딩 실패:", decodeError);
+          // JWT 디코딩 실패 시 기본값 사용
+          const user: User = {
+            id: "current",
+            email: "",
+            nickname: "사용자",
+            preferredTags: [],
+            subscriptionType: "basic",
+            isLGUPlus: false,
+            joinDate: new Date().toISOString(),
+          };
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
+
+          return {
+            isNewUser: false,
+            user,
+          };
+        }
+      }
+    } catch (error: any) {
+      console.error("소셜 로그인 실패:", error);
+      throw new Error(
+        error.response?.data?.message || "소셜 로그인에 실패했습니다.",
+      );
+    }
+  },
 };

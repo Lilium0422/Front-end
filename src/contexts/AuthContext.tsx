@@ -11,6 +11,7 @@ import { authService } from "@/services/authService";
 interface AuthContextType {
   user: User | null;
   login: (email: string, password: string) => Promise<void>;
+  loginWithUser: (user: User) => void; // 소셜 로그인용
   signupComplete: (
     accessToken: string,
     refreshToken: string,
@@ -38,6 +39,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
   const login = async (email: string, password: string) => {
     const loggedInUser = await authService.login(email, password);
     setUser(loggedInUser);
+  };
+
+  const loginWithUser = (user: User) => {
+    setUser(user);
   };
 
   const signupComplete = (
@@ -78,7 +83,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
 
   return (
     <AuthContext.Provider
-      value={{ user, login, signupComplete, logout, updateUser, subscribe }}
+      value={{
+        user,
+        login,
+        loginWithUser,
+        signupComplete,
+        logout,
+        updateUser,
+        subscribe,
+      }}
     >
       {children}
     </AuthContext.Provider>
