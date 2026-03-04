@@ -11,11 +11,13 @@ import {
 } from "lucide-react";
 import { Content } from "@/types";
 import { contentService } from "@/services/contentService";
+import { bookmarkService } from "@/services/bookmarkService";
 import { useAuth } from "@/contexts/AuthContext";
 
 interface ContentModalProps {
   content: Content;
   onClose: () => void;
+  simpleMode?: boolean; // 간소화 모드 (북마크에서 온 경우)
 }
 
 const ContentModal: React.FC<ContentModalProps> = ({ content, onClose }) => {
@@ -52,7 +54,11 @@ const ContentModal: React.FC<ContentModalProps> = ({ content, onClose }) => {
   const checkBookmark = async () => {
     if (!user) return;
     try {
-      const bookmarked = await contentService.isBookmarked(user.id, content.id);
+      // 북마크 목록을 조회해서 현재 콘텐츠가 있는지 확인
+      const response = await bookmarkService.getBookmarks(undefined, 100);
+      const bookmarked = response.bookmarks.some(
+        (b) => b.contentId === parseInt(content.id),
+      );
       setIsBookmarked(bookmarked);
     } catch (error) {
       console.error("찜하기 확인 실패:", error);
@@ -65,13 +71,23 @@ const ContentModal: React.FC<ContentModalProps> = ({ content, onClose }) => {
       return;
     }
     try {
-      const bookmarked = await contentService.toggleBookmark(
-        user.id,
-        content.id,
-      );
-      setIsBookmarked(bookmarked);
-    } catch (error) {
+      const contentId = parseInt(content.id);
+      if (isBookmarked) {
+        // 찜 삭제
+        await bookmarkService.removeBookmark(contentId);
+        setIsBookmarked(false);
+      } else {
+        // 찜 추가
+        await bookmarkService.addBookmark(contentId);
+        setIsBookmarked(true);
+      }
+    } catch (error: any) {
       console.error("찜하기 실패:", error);
+      const errorMessage =
+        error.response?.data?.message ||
+        error.response?.data?.error ||
+        "찜하기에 실패했습니다.";
+      alert(errorMessage);
     }
   };
 

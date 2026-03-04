@@ -7,12 +7,16 @@ import {
   BarChart3,
   Settings,
   Camera,
-  Trash2,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { profileService } from "@/services/profileService";
 import { authService } from "@/services/authService";
+import { bookmarkService } from "@/services/bookmarkService";
 import type { Profile } from "@/types/profile";
+import type { BookmarkItem } from "@/types/bookmark";
+import ContentCard from "@/components/ContentCard";
+import ContentModal from "@/components/ContentModal";
+import type { Content } from "@/types";
 
 type Tab = "profile" | "bookmarks" | "history" | "stats";
 
@@ -29,6 +33,14 @@ const MyPage: React.FC = () => {
   const [editMode, setEditMode] = useState(false);
   const [nickname, setNickname] = useState("");
 
+  // 북마크
+  const [bookmarks, setBookmarks] = useState<BookmarkItem[]>([]);
+  const [bookmarkCursor, setBookmarkCursor] = useState<string | null>(null);
+  const [hasMoreBookmarks, setHasMoreBookmarks] = useState(false);
+
+  // 콘텐츠 모달
+  const [selectedContent, setSelectedContent] = useState<Content | null>(null);
+
   useEffect(() => {
     // AuthContext 로딩 중이면 대기
     if (authLoading) return;
@@ -38,7 +50,15 @@ const MyPage: React.FC = () => {
       return;
     }
     loadProfile();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, authLoading]);
+
+  useEffect(() => {
+    if (activeTab === "bookmarks" && user) {
+      loadBookmarks();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, user]);
 
   const loadProfile = async () => {
     setLoading(true);
@@ -51,6 +71,72 @@ const MyPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const loadBookmarks = async (cursor?: string) => {
+    setLoading(true);
+    try {
+      const data = await bookmarkService.getBookmarks(cursor, 20);
+      console.log("북마크 데이터:", data); // 디버깅용
+      if (cursor) {
+        // 더보기
+        setBookmarks((prev) => [...prev, ...data.bookmarks]);
+      } else {
+        // 초기 로드
+        setBookmarks(data.bookmarks);
+      }
+      setBookmarkCursor(data.nextCursor);
+      setHasMoreBookmarks(data.hasNext);
+    } catch (error) {
+      console.error("북마크 로딩 실패:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleBookmarkRemove = async (contentId: string) => {
+    try {
+      await bookmarkService.removeBookmark(parseInt(contentId));
+      // 북마크 목록 새로고침
+      loadBookmarks();
+    } catch (error) {
+      console.error("북마크 삭제 실패:", error);
+      alert("북마크 삭제에 실패했습니다.");
+    }
+  };
+
+  const handleContentClick = (bookmark: BookmarkItem) => {
+    // BookmarkItem을 Content 타입으로 변환
+    const content: Content = {
+      id: bookmark.contentId.toString(),
+      title: bookmark.title,
+      thumbnailUrl: bookmark.thumbnailUrl,
+      rating: 0,
+      year: new Date().getFullYear(),
+      duration: 0,
+      description: "",
+      tags: bookmark.category ? [bookmark.category] : [],
+      accessLevel: "FREE",
+      viewCount: 0,
+      isSeries: bookmark.contentType === "SERIES",
+    };
+    setSelectedContent(content);
+  };
+
+  const bookmarkToContent = (bookmark: BookmarkItem): Content => {
+    return {
+      id: bookmark.contentId.toString(),
+      title: bookmark.title,
+      thumbnailUrl: bookmark.thumbnailUrl,
+      rating: 0,
+      year: new Date().getFullYear(),
+      duration: 0,
+      description: "",
+      tags: bookmark.category ? [bookmark.category] : [],
+      accessLevel: "FREE",
+      viewCount: 0,
+      isSeries: bookmark.contentType === "SERIES",
+    };
   };
 
   const handleSaveNickname = async () => {
@@ -358,10 +444,10 @@ const MyPage: React.FC = () => {
               </p>
               <button
                 onClick={handleDeleteAccount}
-                className="bg-red-600 hover:bg-red-700 text-white font-medium py-2 px-4 rounded transition-colors"
+                className="bg-red-600 hover:bg-red-700 text-white font-medium py-2 px-4 rounded transition-colors flex items-center space-x-2"
               >
-                <Trash2 className="w-4 h-4 inline mr-2" />
-                회원 탈퇴
+                <User className="w-4 h-4" />
+                <span>회원 탈퇴</span>
               </button>
             </div>
           </div>
@@ -370,12 +456,45 @@ const MyPage: React.FC = () => {
         {/* 찜한 콘텐츠 탭 */}
         {activeTab === "bookmarks" && (
           <div className="max-w-7xl mx-auto">
-            <div className="text-center py-12">
-              <Bookmark className="w-16 h-16 text-gray-600 mx-auto mb-4" />
-              <p className="text-gray-400">
-                찜 목록 기능은 추후 구현 예정입니다.
-              </p>
-            </div>
+            {loading && bookmarks.length === 0 ? (
+              <div className="text-center py-12">
+                <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto"></div>
+              </div>
+            ) : bookmarks.length === 0 ? (
+              <div className="text-center py-12">
+                <Bookmark className="w-16 h-16 text-gray-600 mx-auto mb-4" />
+                <p className="text-gray-400 mb-4">찜한 콘텐츠가 없습니다.</p>
+                <button onClick={() => navigate("/")} className="btn-primary">
+                  콘텐츠 둘러보기
+                </button>
+              </div>
+            ) : (
+              <>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
+                  {bookmarks.map((bookmark) => (
+                    <ContentCard
+                      key={bookmark.bookmarkId}
+                      content={bookmarkToContent(bookmark)}
+                      onCardClick={() => handleContentClick(bookmark)}
+                      simpleHover={true}
+                      onBookmarkToggle={handleBookmarkRemove}
+                    />
+                  ))}
+                </div>
+
+                {hasMoreBookmarks && (
+                  <div className="text-center mt-8">
+                    <button
+                      onClick={() => loadBookmarks(bookmarkCursor ?? undefined)}
+                      disabled={loading}
+                      className="btn-secondary"
+                    >
+                      {loading ? "로딩 중..." : "더보기"}
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
           </div>
         )}
 
@@ -401,6 +520,20 @@ const MyPage: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* 콘텐츠 모달 */}
+      {selectedContent && (
+        <ContentModal
+          content={selectedContent}
+          onClose={() => {
+            setSelectedContent(null);
+            // 북마크 탭이면 목록 새로고침
+            if (activeTab === "bookmarks") {
+              loadBookmarks();
+            }
+          }}
+        />
+      )}
     </div>
   );
 };
