@@ -10,6 +10,7 @@ import { authService } from "@/services/authService";
 
 interface AuthContextType {
   user: User | null;
+  loading: boolean; // 초기 로딩 상태 추가
   login: (email: string, password: string) => Promise<void>;
   loginWithUser: (user: User) => void; // 소셜 로그인용
   signupComplete: (
@@ -30,10 +31,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
   children,
 }) => {
   const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true); // 초기 로딩 상태
 
   useEffect(() => {
     const currentUser = authService.getCurrentUser();
     setUser(currentUser);
+    setLoading(false); // 로딩 완료
   }, []);
 
   const login = async (email: string, password: string) => {
@@ -85,6 +88,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
     <AuthContext.Provider
       value={{
         user,
+        loading,
         login,
         loginWithUser,
         signupComplete,

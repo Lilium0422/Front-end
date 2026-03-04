@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   User,
@@ -6,122 +6,114 @@ import {
   History,
   BarChart3,
   Settings,
+  Camera,
   Trash2,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { contentService } from "@/services/contentService";
+import { profileService } from "@/services/profileService";
 import { authService } from "@/services/authService";
-import { SYSTEM_TAGS } from "@/services/mockData";
-import { Content, WatchHistory } from "@/types";
-import ContentCard from "@/components/ContentCard";
-import ContentModal from "@/components/ContentModal";
+import type { Profile } from "@/types/profile";
 
 type Tab = "profile" | "bookmarks" | "history" | "stats";
 
 const MyPage: React.FC = () => {
-  const { user, updateUser, logout } = useAuth();
+  const { user, loading: authLoading, logout } = useAuth();
   const navigate = useNavigate();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const [activeTab, setActiveTab] = useState<Tab>("profile");
-  const [bookmarks, setBookmarks] = useState<Content[]>([]);
-  const [watchHistory, setWatchHistory] = useState<
-    (WatchHistory & { content: Content })[]
-  >([]);
+  const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(false);
-  const [selectedContent, setSelectedContent] = useState<Content | null>(null);
 
   // 프로필 편집
   const [editMode, setEditMode] = useState(false);
-  const [nickname, setNickname] = useState(user?.nickname || "");
-  const [selectedTags, setSelectedTags] = useState<string[]>(
-    user?.preferredTags || [],
-  );
+  const [nickname, setNickname] = useState("");
 
   useEffect(() => {
+    // AuthContext 로딩 중이면 대기
+    if (authLoading) return;
+
     if (!user) {
       navigate("/login");
       return;
     }
-    loadData();
-  }, [user, activeTab]);
+    loadProfile();
+  }, [user, authLoading]);
 
-  const loadData = async () => {
-    if (!user) return;
+  const loadProfile = async () => {
     setLoading(true);
     try {
-      if (activeTab === "bookmarks") {
-        const data = await contentService.getBookmarks(user.id);
-        setBookmarks(data.map((b) => b.content));
-      } else if (activeTab === "history") {
-        const data = await contentService.getWatchHistory(user.id);
-        setWatchHistory(data);
-      }
+      const data = await profileService.getMyProfile();
+      setProfile(data);
+      setNickname(data.nickname);
     } catch (error) {
-      console.error("데이터 로딩 실패:", error);
+      console.error("프로필 로딩 실패:", error);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleTagToggle = (tag: string) => {
-    setSelectedTags((prev) =>
-      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag],
-    );
-  };
+  const handleSaveNickname = async () => {
+    if (!profile || !nickname.trim()) {
+      alert("닉네임을 입력해주세요.");
+      return;
+    }
 
-  const handleSaveProfile = async () => {
-    if (!user) return;
     try {
-      await updateUser({
-        nickname,
-        preferredTags: selectedTags,
-      });
+      await profileService.updateNickname(profile.userId, nickname);
+      await loadProfile(); // 프로필 새로고침
       setEditMode(false);
-      alert("프로필이 업데이트되었습니다.");
-    } catch (error) {
-      alert("프로필 업데이트에 실패했습니다.");
+      alert("닉네임이 변경되었습니다.");
+    } catch (error: any) {
+      console.error("닉네임 변경 실패:", error);
+
+      // 백엔드 에러 메시지 추출
+      const errorMessage =
+        error.response?.data?.message ||
+        error.response?.data?.error ||
+        "닉네임 변경에 실패했습니다.";
+      alert(errorMessage);
     }
   };
 
+  const handleImageUpload = async (
+    _event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    // 프로필 이미지 업로드는 백엔드 API 배포 후 활성화 예정
+    alert("프로필 이미지 업로드 기능은 백엔드 API 배포 후 사용 가능합니다.");
+  };
+
   const handleDeleteAccount = async () => {
-    if (!user) return;
+    if (!profile) return;
     if (
       !confirm("정말로 회원 탈퇴하시겠습니까? 이 작업은 되돌릴 수 없습니다.")
     ) {
       return;
     }
     try {
-      await authService.deleteAccount(user.id);
+      await authService.deleteAccount(profile.userId.toString());
       logout();
       navigate("/");
       alert("회원 탈퇴가 완료되었습니다.");
-    } catch (error) {
-      alert("회원 탈퇴에 실패했습니다.");
+    } catch (error: any) {
+      console.error("회원 탈퇴 실패:", error);
+      const errorMessage =
+        error.response?.data?.message ||
+        error.response?.data?.error ||
+        "회원 탈퇴에 실패했습니다.";
+      alert(errorMessage);
     }
   };
 
-  const calculateStats = () => {
-    const tagCounts: { [key: string]: number } = {};
-    let totalWatchTime = 0;
+  if (authLoading || loading) {
+    return (
+      <div className="min-h-screen bg-dark flex items-center justify-center">
+        <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    );
+  }
 
-    watchHistory.forEach((h) => {
-      totalWatchTime += h.lastPosition;
-      h.content.tags.forEach((tag) => {
-        tagCounts[tag] = (tagCounts[tag] || 0) + 1;
-      });
-    });
-
-    return {
-      totalContents: watchHistory.length,
-      totalWatchTime: Math.floor(totalWatchTime / 60), // 분 단위
-      tagCounts: Object.entries(tagCounts)
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 5),
-    };
-  };
-
-  if (!user) return null;
-
-  const stats = calculateStats();
+  if (!user || !profile) return null;
 
   return (
     <div className="min-h-screen bg-dark">
@@ -193,6 +185,65 @@ const MyPage: React.FC = () => {
                 )}
               </div>
 
+              {/* 닉네임 변경 제한 안내 */}
+              {profile.lastNicknameChangedAt &&
+                (() => {
+                  const lastChanged = new Date(profile.lastNicknameChangedAt);
+                  const nextChangeDate = new Date(lastChanged);
+                  nextChangeDate.setDate(nextChangeDate.getDate() + 30);
+                  const now = new Date();
+                  const canChange = now >= nextChangeDate;
+
+                  if (!canChange) {
+                    return (
+                      <div className="bg-yellow-900/20 border border-yellow-700 rounded-lg p-3 mb-4">
+                        <p className="text-sm text-yellow-400">
+                          닉네임은 30일마다 변경할 수 있습니다. 다음 변경
+                          가능일: {nextChangeDate.toLocaleDateString("ko-KR")}
+                        </p>
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
+
+              {/* 프로필 이미지 */}
+              <div className="flex justify-center mb-6">
+                <div className="relative">
+                  <div className="w-32 h-32 rounded-full bg-gray-800 flex items-center justify-center overflow-hidden">
+                    {profile.profileImageUrl ? (
+                      <img
+                        src={profile.profileImageUrl}
+                        alt="프로필"
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <User className="w-16 h-16 text-gray-600" />
+                    )}
+                  </div>
+                  <button
+                    onClick={() =>
+                      alert(
+                        "프로필 이미지 업로드 기능은 백엔드 API 배포 후 사용 가능합니다.",
+                      )
+                    }
+                    disabled={true}
+                    className="absolute bottom-0 right-0 bg-gray-600 p-2 rounded-full cursor-not-allowed opacity-50"
+                    title="준비 중"
+                  >
+                    <Camera className="w-5 h-5" />
+                  </button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleImageUpload}
+                    className="hidden"
+                    disabled
+                  />
+                </div>
+              </div>
+
               {editMode ? (
                 <div className="space-y-4">
                   <div>
@@ -204,40 +255,33 @@ const MyPage: React.FC = () => {
                       value={nickname}
                       onChange={(e) => setNickname(e.target.value)}
                       className="input-field"
+                      placeholder="닉네임을 입력하세요"
+                      maxLength={20}
                     />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium mb-3">
-                      선호 태그
-                    </label>
-                    <div className="flex flex-wrap gap-2">
-                      {SYSTEM_TAGS.map((tag) => (
-                        <button
-                          key={tag}
-                          type="button"
-                          onClick={() => handleTagToggle(tag)}
-                          className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
-                            selectedTags.includes(tag)
-                              ? "bg-primary text-white"
-                              : "bg-gray-800 text-gray-300 hover:bg-gray-700"
-                          }`}
-                        >
-                          {tag}
-                        </button>
-                      ))}
-                    </div>
+                    {profile.lastNicknameChangedAt && (
+                      <p className="text-xs text-gray-500 mt-1">
+                        마지막 변경:{" "}
+                        {new Date(
+                          profile.lastNicknameChangedAt,
+                        ).toLocaleDateString("ko-KR")}
+                      </p>
+                    )}
                   </div>
 
                   <div className="flex space-x-3 pt-4">
-                    <button onClick={handleSaveProfile} className="btn-primary">
+                    <button
+                      onClick={handleSaveNickname}
+                      className="btn-primary"
+                      disabled={
+                        !nickname.trim() || nickname === profile.nickname
+                      }
+                    >
                       저장
                     </button>
                     <button
                       onClick={() => {
                         setEditMode(false);
-                        setNickname(user.nickname);
-                        setSelectedTags(user.preferredTags);
+                        setNickname(profile.nickname);
                       }}
                       className="btn-secondary"
                     >
@@ -249,28 +293,30 @@ const MyPage: React.FC = () => {
                 <div className="space-y-4">
                   <div>
                     <p className="text-sm text-gray-400">이메일</p>
-                    <p className="text-lg">{user.email}</p>
+                    <p className="text-lg">{profile.email}</p>
                   </div>
                   <div>
                     <p className="text-sm text-gray-400">닉네임</p>
-                    <p className="text-lg">{user.nickname}</p>
+                    <p className="text-lg">{profile.nickname}</p>
                   </div>
                   <div>
                     <p className="text-sm text-gray-400">구독 상태</p>
                     <p className="text-lg">
-                      {user.subscriptionType === "none" ? "미구독" : "구독 중"}
-                      {user.isLGUPlus && " (LG U+ 회원)"}
+                      {profile.subscriptionStatus === "NONE"
+                        ? "미구독"
+                        : "구독 중"}
+                      {profile.isUPlusMember && " (U+ 회원)"}
                     </p>
                   </div>
                   <div>
                     <p className="text-sm text-gray-400 mb-2">선호 태그</p>
                     <div className="flex flex-wrap gap-2">
-                      {user.preferredTags.map((tag, index) => (
+                      {profile.preferredTags.map((tag) => (
                         <span
-                          key={index}
+                          key={tag.tagId}
                           className="bg-primary px-3 py-1 rounded-full text-sm"
                         >
-                          {tag}
+                          {tag.name}
                         </span>
                       ))}
                     </div>
@@ -278,7 +324,7 @@ const MyPage: React.FC = () => {
                   <div>
                     <p className="text-sm text-gray-400">가입일</p>
                     <p className="text-lg">
-                      {new Date(user.joinDate).toLocaleDateString("ko-KR")}
+                      {new Date(profile.createdAt).toLocaleDateString("ko-KR")}
                     </p>
                   </div>
                 </div>
@@ -286,22 +332,23 @@ const MyPage: React.FC = () => {
             </div>
 
             {/* 구독 관리 */}
-            {user.subscriptionType === "none" && !user.isLGUPlus && (
-              <div className="bg-gray-900 rounded-lg p-6 mb-6">
-                <h3 className="text-lg font-bold mb-3">
-                  구독하고 더 많은 혜택을 누리세요
-                </h3>
-                <p className="text-gray-400 mb-4">
-                  모든 콘텐츠 시청, 배속 재생, 광고 없음
-                </p>
-                <button
-                  onClick={() => navigate("/subscribe")}
-                  className="btn-primary"
-                >
-                  구독하기
-                </button>
-              </div>
-            )}
+            {profile.subscriptionStatus === "NONE" &&
+              !profile.isUPlusMember && (
+                <div className="bg-gray-900 rounded-lg p-6 mb-6">
+                  <h3 className="text-lg font-bold mb-3">
+                    구독하고 더 많은 혜택을 누리세요
+                  </h3>
+                  <p className="text-gray-400 mb-4">
+                    모든 콘텐츠 시청, 배속 재생, 광고 없음
+                  </p>
+                  <button
+                    onClick={() => navigate("/subscribe")}
+                    className="btn-primary"
+                  >
+                    구독하기
+                  </button>
+                </div>
+              )}
 
             {/* 회원 탈퇴 */}
             <div className="bg-gray-900 rounded-lg p-6">
@@ -323,148 +370,37 @@ const MyPage: React.FC = () => {
         {/* 찜한 콘텐츠 탭 */}
         {activeTab === "bookmarks" && (
           <div className="max-w-7xl mx-auto">
-            {loading ? (
-              <div className="text-center py-12">
-                <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto"></div>
-              </div>
-            ) : bookmarks.length === 0 ? (
-              <div className="text-center py-12">
-                <Bookmark className="w-16 h-16 text-gray-600 mx-auto mb-4" />
-                <p className="text-gray-400">찜한 콘텐츠가 없습니다.</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
-                {bookmarks.map((content) => (
-                  <ContentCard
-                    key={content.id}
-                    content={content}
-                    onCardClick={setSelectedContent}
-                  />
-                ))}
-              </div>
-            )}
+            <div className="text-center py-12">
+              <Bookmark className="w-16 h-16 text-gray-600 mx-auto mb-4" />
+              <p className="text-gray-400">
+                찜 목록 기능은 추후 구현 예정입니다.
+              </p>
+            </div>
           </div>
         )}
 
         {/* 시청 이력 탭 */}
         {activeTab === "history" && (
           <div className="max-w-5xl mx-auto">
-            {loading ? (
-              <div className="text-center py-12">
-                <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto"></div>
-              </div>
-            ) : watchHistory.length === 0 ? (
-              <div className="text-center py-12">
-                <History className="w-16 h-16 text-gray-600 mx-auto mb-4" />
-                <p className="text-gray-400">시청 이력이 없습니다.</p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {watchHistory.map((history) => (
-                  <div
-                    key={history.id}
-                    className="bg-gray-900 rounded-lg p-4 flex items-center space-x-4 hover:bg-gray-800 transition-colors cursor-pointer"
-                    onClick={() => navigate(`/content/${history.contentId}`)}
-                  >
-                    <img
-                      src={history.content.thumbnailUrl}
-                      alt={history.content.title}
-                      className="w-40 h-24 object-cover rounded flex-shrink-0"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <h3 className="font-semibold text-lg mb-2">
-                        {history.content.title}
-                      </h3>
-                      <p className="text-sm text-gray-400 mb-2">
-                        {new Date(history.watchedAt).toLocaleDateString(
-                          "ko-KR",
-                        )}{" "}
-                        시청
-                      </p>
-                      <div className="w-full bg-gray-700 rounded-full h-2">
-                        <div
-                          className="bg-primary h-2 rounded-full"
-                          style={{
-                            width: `${(history.lastPosition / history.content.duration) * 100}%`,
-                          }}
-                        />
-                      </div>
-                      <p className="text-xs text-gray-500 mt-1">
-                        {Math.floor(
-                          (history.lastPosition / history.content.duration) *
-                            100,
-                        )}
-                        % 시청
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+            <div className="text-center py-12">
+              <History className="w-16 h-16 text-gray-600 mx-auto mb-4" />
+              <p className="text-gray-400">
+                시청 이력 기능은 추후 구현 예정입니다.
+              </p>
+            </div>
           </div>
         )}
 
         {/* 통계 탭 */}
         {activeTab === "stats" && (
           <div className="max-w-4xl mx-auto">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-              <div className="bg-gray-900 rounded-lg p-6">
-                <p className="text-sm text-gray-400 mb-2">총 시청 콘텐츠</p>
-                <p className="text-3xl font-bold text-primary">
-                  {stats.totalContents}개
-                </p>
-              </div>
-              <div className="bg-gray-900 rounded-lg p-6">
-                <p className="text-sm text-gray-400 mb-2">총 시청 시간</p>
-                <p className="text-3xl font-bold text-primary">
-                  {stats.totalWatchTime}분
-                </p>
-              </div>
-              <div className="bg-gray-900 rounded-lg p-6">
-                <p className="text-sm text-gray-400 mb-2">찜한 콘텐츠</p>
-                <p className="text-3xl font-bold text-primary">
-                  {bookmarks.length}개
-                </p>
-              </div>
-            </div>
-
-            <div className="bg-gray-900 rounded-lg p-6">
-              <h3 className="text-xl font-bold mb-6">태그별 시청 통계</h3>
-              {stats.tagCounts.length === 0 ? (
-                <p className="text-center text-gray-400 py-8">
-                  시청 이력이 없습니다.
-                </p>
-              ) : (
-                <div className="space-y-4">
-                  {stats.tagCounts.map(([tag, count]) => (
-                    <div key={tag}>
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="font-medium">{tag}</span>
-                        <span className="text-sm text-gray-400">{count}개</span>
-                      </div>
-                      <div className="w-full bg-gray-700 rounded-full h-3">
-                        <div
-                          className="bg-primary h-3 rounded-full transition-all"
-                          style={{
-                            width: `${(count / stats.tagCounts[0][1]) * 100}%`,
-                          }}
-                        />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+            <div className="text-center py-12">
+              <BarChart3 className="w-16 h-16 text-gray-600 mx-auto mb-4" />
+              <p className="text-gray-400">통계 기능은 추후 구현 예정입니다.</p>
             </div>
           </div>
         )}
       </div>
-
-      {selectedContent && (
-        <ContentModal
-          content={selectedContent}
-          onClose={() => setSelectedContent(null)}
-        />
-      )}
     </div>
   );
 };

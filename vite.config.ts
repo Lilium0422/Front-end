@@ -14,12 +14,12 @@ export default defineConfig({
     open: false, // 자동으로 브라우저 열지 않음
     proxy: {
       "/api": {
-        target: "http://localhost:8081",
+        target: "http://localhost:8881",
         changeOrigin: true,
         secure: false,
       },
       "/admin": {
-        target: "http://localhost:8082",
+        target: "http://localhost:8882",
         changeOrigin: true,
         secure: false,
       },
