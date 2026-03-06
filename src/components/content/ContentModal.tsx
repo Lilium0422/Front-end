@@ -141,9 +141,13 @@ const ContentModal: React.FC<ContentModalProps> = ({ content, onClose }) => {
         {/* 히어로 섹션 */}
         <div className="relative aspect-video">
           <img
-            src={content.thumbnailUrl}
+            src={content.thumbnailUrl || content.thumbnail}
             alt={content.title}
             className="w-full h-full object-cover"
+            onError={(e) => {
+              const target = e.target as HTMLImageElement;
+              target.src = "https://via.placeholder.com/800x450?text=No+Image";
+            }}
           />
           <div className="absolute inset-0 bg-gradient-to-t from-gray-900 via-transparent to-transparent" />
 
