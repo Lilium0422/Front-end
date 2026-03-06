@@ -1,10 +1,11 @@
-import React, { useEffect, useState, useRef, useCallback } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import {
   TrendingUp,
   History,
   Flame,
   ChevronLeft,
   ChevronRight,
+  ChevronRight as ArrowRight,
 } from "lucide-react";
 import { Content } from "@/types";
 import { contentService } from "@/services/contentService";
@@ -13,70 +14,17 @@ import ContentCard from "@/components/content/ContentCard";
 import ContentModal from "@/components/content/ContentModal";
 import { useNavigate } from "react-router-dom";
 
-type TabType = "all" | "original" | "creator";
-
 const HomePage: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [popularContents, setPopularContents] = useState<Content[]>([]);
   const [recommendedContents, setRecommendedContents] = useState<Content[]>([]);
-  const [allContents, setAllContents] = useState<Content[]>([]);
+  const [originalContents, setOriginalContents] = useState<Content[]>([]);
   const [continueWatching, setContinueWatching] = useState<Content[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<TabType>("all");
   const [selectedContent, setSelectedContent] = useState<Content | null>(null);
   const [chartScrollPosition, setChartScrollPosition] = useState(0);
   const chartContainerRef = useRef<HTMLDivElement>(null);
-  const [hasMore, setHasMore] = useState(true);
-  const observerRef = useRef<IntersectionObserver | null>(null);
-  const loadingMoreRef = useRef(false);
-  const pageRef = useRef(0);
-
-  const loadMoreContents = useCallback(async () => {
-    if (loadingMoreRef.current) return;
-    loadingMoreRef.current = true;
-    try {
-      const nextPage = pageRef.current + 1;
-      const uploaderType =
-        activeTab === "original"
-          ? "ORIGINAL"
-          : activeTab === "creator"
-            ? "CREATOR"
-            : undefined;
-      const newContents = await contentService.getDefaultContentList({
-        uploaderType,
-        page: nextPage,
-        size: 15,
-      });
-      if (newContents.length < 15) {
-        setHasMore(false);
-      }
-      setAllContents((prev) => [...prev, ...newContents]);
-      pageRef.current = nextPage;
-    } catch (error) {
-      console.error("추가 콘텐츠 로딩 실패:", error);
-    } finally {
-      loadingMoreRef.current = false;
-    }
-  }, [activeTab]);
-
-  const loadMoreRef = useCallback(
-    (node: HTMLDivElement | null) => {
-      if (observerRef.current) observerRef.current.disconnect();
-      if (!node) return;
-
-      observerRef.current = new IntersectionObserver(
-        (entries) => {
-          if (entries[0].isIntersecting) {
-            loadMoreContents();
-          }
-        },
-        { threshold: 0.1 },
-      );
-      observerRef.current.observe(node);
-    },
-    [loadMoreContents],
-  );
 
   useEffect(() => {
     loadInitialContents();
@@ -85,85 +33,45 @@ const HomePage: React.FC = () => {
   const loadInitialContents = async () => {
     setLoading(true);
     try {
-      // 인기 콘텐츠용 (첫 페이지 데이터 활용)
-      const defaultList = await contentService.getDefaultContentList({
+      // 전체 콘텐츠 가져오기
+      const allContents = await contentService.getDefaultContentList({
         page: 0,
-        size: 15,
+        size: 50, // 충분히 많이 가져오기
       });
+      console.log("전체 콘텐츠:", allContents);
 
-      setAllContents(defaultList);
-      setPopularContents(defaultList.slice(0, 10)); // 상위 10개를 인기 콘텐츠로
-      if (defaultList.length < 15) {
-        setHasMore(false);
-      }
-      pageRef.current = 0;
+      setPopularContents(allContents.slice(0, 10));
 
-      // 사용자 태그 기반 추천 (클라이언트 사이드 필터링)
+      // 필터링 없이 전체 콘텐츠 중 15개만 오리지널 섹션에 표시
+      setOriginalContents(allContents.slice(0, 15));
+
+      // 사용자 태그 기반 추천
       if (user && user.preferredTags.length > 0) {
-        const recommended = defaultList.filter((content) =>
+        const recommended = allContents.filter((content) =>
           content.tags.some((tag) => user.preferredTags.includes(tag)),
         );
         setRecommendedContents(recommended);
       }
 
-      // 이어보기 (로그인 시)
+      // 이어보기
       if (user) {
         const watching = await contentService.getWatchingContentList();
         setContinueWatching(watching);
       }
     } catch (error) {
       console.error("콘텐츠 로딩 실패:", error);
+      setOriginalContents([]);
+      setPopularContents([]);
     } finally {
       setLoading(false);
     }
   };
 
-  // 탭 변경 시 콘텐츠 리셋
-  const isFirstRender = useRef(true);
-  useEffect(() => {
-    if (isFirstRender.current) {
-      isFirstRender.current = false;
-      return;
-    }
-    setAllContents([]);
-    setHasMore(true);
-    pageRef.current = -1;
-    const loadTabContents = async () => {
-      loadingMoreRef.current = true;
-      try {
-        const uploaderType =
-          activeTab === "original"
-            ? "ORIGINAL"
-            : activeTab === "creator"
-              ? "CREATOR"
-              : undefined;
-        const newContents = await contentService.getDefaultContentList({
-          uploaderType,
-          page: 0,
-          size: 15,
-        });
-        if (newContents.length < 15) {
-          setHasMore(false);
-        }
-        setAllContents(newContents);
-        pageRef.current = 0;
-      } catch (error) {
-        console.error("콘텐츠 로딩 실패:", error);
-      } finally {
-        loadingMoreRef.current = false;
-      }
-    };
-    loadTabContents();
-  }, [activeTab]);
-
-  // 필터링된 콘텐츠 — 탭 필터링은 API에서 처리하므로 그대로 사용
-  const filteredContents = allContents;
-
   const handleChartScroll = (direction: "left" | "right") => {
     if (!chartContainerRef.current) return;
 
     const container = chartContainerRef.current;
-    const scrollAmount = container.offsetWidth; // 한 화면 너비만큼 스크롤
+    const scrollAmount = container.offsetWidth;
 
     if (direction === "left") {
       container.scrollBy({ left: -scrollAmount, behavior: "smooth" });
@@ -273,7 +181,6 @@ const HomePage: React.FC = () => {
             <h2 className="text-2xl font-bold">실시간 인기 차트</h2>
           </div>
           <div className="relative group">
-            {/* 왼쪽 화살표 */}
             {!isAtStart && (
               <button
                 onClick={() => handleChartScroll("left")}
@@ -283,7 +190,6 @@ const HomePage: React.FC = () => {
               </button>
             )}
 
-            {/* 오른쪽 화살표 */}
             {!isAtEnd && (
               <button
                 onClick={() => handleChartScroll("right")}
@@ -293,7 +199,6 @@ const HomePage: React.FC = () => {
               </button>
             )}
 
-            {/* 스크롤 컨테이너 */}
             <div
               ref={chartContainerRef}
               onScroll={updateScrollPosition}
@@ -351,69 +256,22 @@ const HomePage: React.FC = () => {
           </section>
         )}
 
-        {/* Tabs */}
+        {/* Original Contents */}
         <section>
-          <div className="flex gap-4 mb-6 border-b border-gray-800">
-            <button
-              onClick={() => setActiveTab("all")}
-              className={`px-4 py-2 font-medium transition-colors relative ${
-                activeTab === "all"
-                  ? "text-white"
-                  : "text-gray-400 hover:text-white"
-              }`}
-            >
-              전체
-              {activeTab === "all" && (
-                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
-              )}
-            </button>
-            <button
-              onClick={() => setActiveTab("original")}
-              className={`px-4 py-2 font-medium transition-colors relative ${
-                activeTab === "original"
-                  ? "text-white"
-                  : "text-gray-400 hover:text-white"
-              }`}
-            >
-              오리지널
-              {activeTab === "original" && (
-                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
-              )}
-            </button>
-            <button
-              onClick={() => setActiveTab("creator")}
-              className={`px-4 py-2 font-medium transition-colors relative ${
-                activeTab === "creator"
-                  ? "text-white"
-                  : "text-gray-400 hover:text-white"
-              }`}
-            >
-              크리에이터
-              {activeTab === "creator" && (
-                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
-              )}
-            </button>
-          </div>
-
-          {/* Content Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-            {filteredContents.map((content) => (
-              <ContentCard
-                key={content.id}
-                content={content}
-                onCardClick={setSelectedContent}
-              />
-            ))}
-          </div>
-
-          {/* 무한스크롤 로딩 트리거 */}
-          {hasMore && (
-            <div ref={loadMoreRef} className="flex justify-center py-8">
-              <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-2">
+              <h2 className="text-2xl font-bold">오리지널 콘텐츠</h2>
+              <button
+                onClick={() => navigate("/original")}
+                className="flex items-center gap-1 text-sm text-gray-400 hover:text-white transition-colors"
+              >
+                <span>모두보기</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
             </div>
-          )}
+          </div>
 
-          {filteredContents.length === 0 && (
+          {originalContents.length === 0 ? (
             <div className="text-center py-12 text-gray-400">
               {!isSubscribed ? (
                 <div>
@@ -431,11 +289,20 @@ const HomePage: React.FC = () => {
                 <p>콘텐츠가 없습니다.</p>
               )}
             </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+              {originalContents.map((content) => (
+                <ContentCard
+                  key={content.id}
+                  content={content}
+                  onCardClick={setSelectedContent}
+                />
+              ))}
+            </div>
           )}
         </section>
       </div>
 
-      {/* 콘텐츠 모달 */}
       {selectedContent && (
         <ContentModal
           content={selectedContent}
