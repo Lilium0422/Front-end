@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   User,
   Bookmark,
@@ -23,9 +23,18 @@ type Tab = "profile" | "bookmarks" | "history" | "stats";
 const MyPage: React.FC = () => {
   const { user, loading: authLoading, logout } = useAuth();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [activeTab, setActiveTab] = useState<Tab>("profile");
+  // URL 쿼리 파라미터에서 탭 읽기
+  const tabParam = searchParams.get("tab") as Tab | null;
+  const [activeTab, setActiveTab] = useState<Tab>(tabParam || "profile");
+
+  // 탭 변경 시 URL 업데이트
+  const handleTabChange = (tab: Tab) => {
+    setActiveTab(tab);
+    setSearchParams({ tab });
+  };
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -209,7 +218,7 @@ const MyPage: React.FC = () => {
         {/* 탭 네비게이션 */}
         <div className="flex space-x-4 mb-8 border-b border-gray-800">
           <button
-            onClick={() => setActiveTab("profile")}
+            onClick={() => handleTabChange("profile")}
             className={`pb-4 px-4 transition-colors ${
               activeTab === "profile"
                 ? "border-b-2 border-primary text-primary"
@@ -220,7 +229,7 @@ const MyPage: React.FC = () => {
             프로필
           </button>
           <button
-            onClick={() => setActiveTab("bookmarks")}
+            onClick={() => handleTabChange("bookmarks")}
             className={`pb-4 px-4 transition-colors ${
               activeTab === "bookmarks"
                 ? "border-b-2 border-primary text-primary"
@@ -231,7 +240,7 @@ const MyPage: React.FC = () => {
             찜한 콘텐츠
           </button>
           <button
-            onClick={() => setActiveTab("history")}
+            onClick={() => handleTabChange("history")}
             className={`pb-4 px-4 transition-colors ${
               activeTab === "history"
                 ? "border-b-2 border-primary text-primary"
@@ -242,7 +251,7 @@ const MyPage: React.FC = () => {
             시청 이력
           </button>
           <button
-            onClick={() => setActiveTab("stats")}
+            onClick={() => handleTabChange("stats")}
             className={`pb-4 px-4 transition-colors ${
               activeTab === "stats"
                 ? "border-b-2 border-primary text-primary"

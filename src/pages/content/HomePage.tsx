@@ -3,6 +3,7 @@ import {
   TrendingUp,
   History,
   Flame,
+  Bookmark,
   ChevronLeft,
   ChevronRight,
   ChevronRight as ArrowRight,
@@ -21,6 +22,7 @@ const HomePage: React.FC = () => {
   const [recommendedContents, setRecommendedContents] = useState<Content[]>([]);
   const [originalContents, setOriginalContents] = useState<Content[]>([]);
   const [continueWatching, setContinueWatching] = useState<Content[]>([]);
+  const [bookmarkedContents, setBookmarkedContents] = useState<Content[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedContent, setSelectedContent] = useState<Content | null>(null);
   const [chartScrollPosition, setChartScrollPosition] = useState(0);
@@ -64,6 +66,10 @@ const HomePage: React.FC = () => {
       if (user) {
         const watching = await contentService.getWatchingContentList();
         setContinueWatching(watching);
+
+        // 찜 목록
+        const bookmarks = await contentService.getBookmarkList();
+        setBookmarkedContents(bookmarks);
       }
     } catch (error) {
       console.error("콘텐츠 로딩 실패:", error);
@@ -241,6 +247,34 @@ const HomePage: React.FC = () => {
             </div>
           </div>
         </section>
+
+        {/* Bookmarked Contents */}
+        {user && bookmarkedContents.length > 0 && (
+          <section>
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-2">
+                <Bookmark className="w-6 h-6 text-primary" />
+                <h2 className="text-2xl font-bold">내가 찜한 콘텐츠</h2>
+                <button
+                  onClick={() => navigate("/mypage?tab=bookmarks")}
+                  className="flex items-center gap-1 text-sm text-gray-400 hover:text-white transition-colors"
+                >
+                  <span>모두보기</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+              {bookmarkedContents.slice(0, 5).map((content) => (
+                <ContentCard
+                  key={content.id}
+                  content={content}
+                  onCardClick={setSelectedContent}
+                />
+              ))}
+            </div>
+          </section>
+        )}
 
         {/* Recommended */}
         {user && recommendedContents.length > 0 && (
