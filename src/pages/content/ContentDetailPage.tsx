@@ -12,11 +12,12 @@ import {
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
-import { Content, Comment, Episode } from "@/types";
+import { Content, Episode } from "@/types";
 import { contentService } from "@/services/contentService";
 import { videoService, type VideoPlayInfo } from "@/services/videoService";
 import { historyService } from "@/services/historyService";
 import { bookmarkService } from "@/services/bookmarkService";
+import { commentService, type CommentDto } from "@/services/commentService";
 import { useAuth } from "@/contexts/AuthContext";
 import VideoPlayer from "@/components/common/VideoPlayer";
 
@@ -28,7 +29,7 @@ const ContentDetailPage: React.FC = () => {
   const [content, setContent] = useState<Content | null>(null);
   const [currentEpisode, setCurrentEpisode] = useState<Episode | null>(null);
   const [playInfo, setPlayInfo] = useState<VideoPlayInfo | null>(null);
-  const [comments, setComments] = useState<Comment[]>([]);
+  const [comments, setComments] = useState<CommentDto[]>([]);
   const [isBookmarked, setIsBookmarked] = useState(false);
   const [commentText, setCommentText] = useState("");
   const [loading, setLoading] = useState(true);
@@ -39,6 +40,8 @@ const ContentDetailPage: React.FC = () => {
   const lastSaveTimeRef = useRef(0);
   const [isCommentPanelOpen, setIsCommentPanelOpen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [editingCommentId, setEditingCommentId] = useState<number | null>(null);
+  const [editingCommentText, setEditingCommentText] = useState("");
 
   const shouldAutoPlay = searchParams.get("autoplay") === "true";
   const episodeParam = searchParams.get("episode");
@@ -145,7 +148,6 @@ const ContentDetailPage: React.FC = () => {
       }
     }
 
-    loadComments();
     checkBookmark();
   }, [content]);
 
@@ -185,6 +187,9 @@ const ContentDetailPage: React.FC = () => {
         // 조회수 증가 실패는 무시
       }
 
+      // 댓글 로드
+      loadComments();
+
       if (!info.url) {
         setPlayError("현재 재생 가능한 영상이 없습니다.");
       }
@@ -204,12 +209,10 @@ const ContentDetailPage: React.FC = () => {
   };
 
   const loadComments = async () => {
-    if (!id) return;
+    if (!currentVideoIdRef.current) return;
     try {
-      const episodeId =
-        content?.isSeries && currentEpisode ? currentEpisode.id : undefined;
-      const data = await contentService.getComments(id, episodeId);
-      setComments(data);
+      const data = await commentService.getComments(currentVideoIdRef.current);
+      setComments(data.content);
     } catch (error) {
       console.error("댓글 로딩 실패:", error);
     }
@@ -306,21 +309,55 @@ const ContentDetailPage: React.FC = () => {
 
   const handleCommentSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!id || !user || !commentText.trim()) return;
+    if (!currentVideoIdRef.current || !user || !commentText.trim()) return;
     try {
-      const episodeId =
-        content?.isSeries && currentEpisode ? currentEpisode.id : undefined;
-      const newComment = await contentService.addComment(
-        id,
-        user.id,
-        user.nickname,
+      await commentService.createComment(
+        currentVideoIdRef.current,
         commentText,
-        episodeId,
       );
-      setComments([newComment, ...comments]);
       setCommentText("");
+      // 댓글 목록 새로고침
+      loadComments();
     } catch (error) {
       console.error("댓글 작성 실패:", error);
+    }
+  };
+
+  const handleDeleteComment = async (commentId: number) => {
+    if (!currentVideoIdRef.current || !user) return;
+    if (!confirm("댓글을 삭제하시겠습니까?")) return;
+    try {
+      await commentService.deleteComment(currentVideoIdRef.current, commentId);
+      loadComments();
+    } catch (error) {
+      console.error("댓글 삭제 실패:", error);
+    }
+  };
+
+  const handleEditComment = (comment: CommentDto) => {
+    setEditingCommentId(comment.commentId);
+    setEditingCommentText(comment.body);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingCommentId(null);
+    setEditingCommentText("");
+  };
+
+  const handleSaveEdit = async (commentId: number) => {
+    if (!currentVideoIdRef.current || !user || !editingCommentText.trim())
+      return;
+    try {
+      await commentService.updateComment(
+        currentVideoIdRef.current,
+        commentId,
+        editingCommentText,
+      );
+      setEditingCommentId(null);
+      setEditingCommentText("");
+      loadComments();
+    } catch (error) {
+      console.error("댓글 수정 실패:", error);
     }
   };
 
@@ -468,20 +505,84 @@ const ContentDetailPage: React.FC = () => {
                     ) : (
                       comments.map((comment) => (
                         <div
-                          key={comment.id}
+                          key={comment.commentId}
                           className="border-b border-gray-800 pb-3"
                         >
-                          <div className="flex items-center justify-between mb-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            {comment.profileImageUrl && (
+                              <img
+                                src={comment.profileImageUrl}
+                                alt=""
+                                className="w-6 h-6 rounded-full object-cover"
+                              />
+                            )}
                             <span className="font-semibold text-sm">
-                              {comment.userName}
+                              {comment.nickname}
                             </span>
-                            <span className="text-xs text-gray-500">
+                            <span className="text-xs text-gray-500 ml-auto">
                               {formatDate(comment.createdAt)}
                             </span>
                           </div>
-                          <p className="text-gray-300 text-sm">
-                            {comment.content}
-                          </p>
+                          {editingCommentId === comment.commentId ? (
+                            <div className="mt-1">
+                              <div className="flex gap-2">
+                                <input
+                                  type="text"
+                                  value={editingCommentText}
+                                  onChange={(e) =>
+                                    setEditingCommentText(e.target.value)
+                                  }
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter")
+                                      handleSaveEdit(comment.commentId);
+                                    if (e.key === "Escape") handleCancelEdit();
+                                  }}
+                                  className="flex-1 bg-transparent border-b border-gray-700 focus:border-primary outline-none py-1 text-sm"
+                                  autoFocus
+                                />
+                              </div>
+                              <div className="flex gap-2 mt-1">
+                                <button
+                                  onClick={() =>
+                                    handleSaveEdit(comment.commentId)
+                                  }
+                                  className="text-xs text-primary hover:text-primary/80 transition-colors"
+                                >
+                                  저장
+                                </button>
+                                <button
+                                  onClick={handleCancelEdit}
+                                  className="text-xs text-gray-500 hover:text-gray-300 transition-colors"
+                                >
+                                  취소
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <p className="text-gray-300 text-sm">
+                              {comment.body}
+                            </p>
+                          )}
+                          {user &&
+                            user.id === comment.userId.toString() &&
+                            editingCommentId !== comment.commentId && (
+                              <div className="flex gap-2 mt-1">
+                                <button
+                                  onClick={() => handleEditComment(comment)}
+                                  className="text-xs text-gray-500 hover:text-primary transition-colors"
+                                >
+                                  수정
+                                </button>
+                                <button
+                                  onClick={() =>
+                                    handleDeleteComment(comment.commentId)
+                                  }
+                                  className="text-xs text-gray-500 hover:text-red-400 transition-colors"
+                                >
+                                  삭제
+                                </button>
+                              </div>
+                            )}
                         </div>
                       ))
                     )}
@@ -680,18 +781,80 @@ const ContentDetailPage: React.FC = () => {
                 ) : (
                   comments.map((comment) => (
                     <div
-                      key={comment.id}
+                      key={comment.commentId}
                       className="border-b border-gray-800 pb-4"
                     >
-                      <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2 mb-2">
+                        {comment.profileImageUrl && (
+                          <img
+                            src={comment.profileImageUrl}
+                            alt=""
+                            className="w-8 h-8 rounded-full object-cover"
+                          />
+                        )}
                         <span className="font-semibold">
-                          {comment.userName}
+                          {comment.nickname}
                         </span>
-                        <span className="text-xs text-gray-500">
+                        <span className="text-xs text-gray-500 ml-auto">
                           {formatDate(comment.createdAt)}
                         </span>
                       </div>
-                      <p className="text-gray-300">{comment.content}</p>
+                      {editingCommentId === comment.commentId ? (
+                        <div className="mt-2">
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              value={editingCommentText}
+                              onChange={(e) =>
+                                setEditingCommentText(e.target.value)
+                              }
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter")
+                                  handleSaveEdit(comment.commentId);
+                                if (e.key === "Escape") handleCancelEdit();
+                              }}
+                              className="flex-1 input-field"
+                              autoFocus
+                            />
+                          </div>
+                          <div className="flex gap-3 mt-2">
+                            <button
+                              onClick={() => handleSaveEdit(comment.commentId)}
+                              className="text-xs text-primary hover:text-primary/80 transition-colors"
+                            >
+                              저장
+                            </button>
+                            <button
+                              onClick={handleCancelEdit}
+                              className="text-xs text-gray-500 hover:text-gray-300 transition-colors"
+                            >
+                              취소
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-gray-300">{comment.body}</p>
+                      )}
+                      {user &&
+                        user.id === comment.userId.toString() &&
+                        editingCommentId !== comment.commentId && (
+                          <div className="flex gap-3 mt-2">
+                            <button
+                              onClick={() => handleEditComment(comment)}
+                              className="text-xs text-gray-500 hover:text-primary transition-colors"
+                            >
+                              수정
+                            </button>
+                            <button
+                              onClick={() =>
+                                handleDeleteComment(comment.commentId)
+                              }
+                              className="text-xs text-gray-500 hover:text-red-400 transition-colors"
+                            >
+                              삭제
+                            </button>
+                          </div>
+                        )}
                     </div>
                   ))
                 )}
