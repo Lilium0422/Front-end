@@ -6,13 +6,19 @@ import {
   Volume2,
   VolumeX,
   Maximize,
+  Minimize,
   Settings,
+  MessageCircle,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 
 interface VideoPlayerProps {
   videoUrl: string;
   onTimeUpdate?: (currentTime: number, playDurationSec: number) => void;
+  onToggleComments?: () => void;
+  onToggleFullscreen?: () => void;
+  isCommentOpen?: boolean;
+  isFullscreen?: boolean;
   startTime?: number;
   autoPlay?: boolean;
 }
@@ -20,6 +26,10 @@ interface VideoPlayerProps {
 const VideoPlayer: React.FC<VideoPlayerProps> = ({
   videoUrl,
   onTimeUpdate,
+  onToggleComments,
+  onToggleFullscreen,
+  isCommentOpen = false,
+  isFullscreen = false,
   startTime = 0,
   autoPlay = false,
 }) => {
@@ -158,12 +168,8 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
   };
 
   const toggleFullscreen = () => {
-    const video = videoRef.current;
-    if (!video) return;
-    if (document.fullscreenElement) {
-      document.exitFullscreen();
-    } else {
-      video.requestFullscreen();
+    if (onToggleFullscreen) {
+      onToggleFullscreen();
     }
   };
 
@@ -175,13 +181,13 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
 
   return (
     <div
-      className="relative bg-black group"
+      className={`relative bg-black group ${isFullscreen ? "h-full" : ""}`}
       onMouseEnter={() => setShowControls(true)}
       onMouseLeave={() => setShowControls(false)}
     >
       <video
         ref={videoRef}
-        className="w-full aspect-video"
+        className={`w-full ${isFullscreen ? "h-full object-contain" : "aspect-video"}`}
         onTimeUpdate={handleTimeUpdate}
         onLoadedMetadata={handleLoadedMetadata}
         onPlay={handlePlay}
@@ -246,7 +252,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
           </div>
 
           <div className="flex items-center space-x-4">
-            <div className="relative">
+            <div className="relative flex items-center">
               <button
                 onClick={() => setShowSettings(!showSettings)}
                 className={`hover:text-primary transition-colors ${!canUseSpeedControl ? "opacity-50 cursor-not-allowed" : ""}`}
@@ -271,11 +277,25 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
               )}
             </div>
 
+            {onToggleComments && isFullscreen && (
+              <button
+                onClick={onToggleComments}
+                className={`hover:text-primary transition-colors ${isCommentOpen ? "text-primary" : ""}`}
+                title="댓글"
+              >
+                <MessageCircle className="w-5 h-5" />
+              </button>
+            )}
+
             <button
               onClick={toggleFullscreen}
               className="hover:text-primary transition-colors"
             >
-              <Maximize className="w-5 h-5" />
+              {isFullscreen ? (
+                <Minimize className="w-5 h-5" />
+              ) : (
+                <Maximize className="w-5 h-5" />
+              )}
             </button>
           </div>
         </div>

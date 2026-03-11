@@ -34,16 +34,64 @@ const ContentDetailPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [playLoading, setPlayLoading] = useState(false);
   const [playError, setPlayError] = useState<string | null>(null);
-  const videoPlayerRef = useRef<HTMLDivElement>(null);
+  const theaterRef = useRef<HTMLDivElement>(null);
   const currentVideoIdRef = useRef<string | null>(null);
   const lastSaveTimeRef = useRef(0);
+  const [isCommentPanelOpen, setIsCommentPanelOpen] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   const shouldAutoPlay = searchParams.get("autoplay") === "true";
   const episodeParam = searchParams.get("episode");
 
+  // 전체화면 토글
+  const handleToggleFullscreen = () => {
+    const el = theaterRef.current;
+    if (!el) return;
+    if (document.fullscreenElement) {
+      document.exitFullscreen();
+    } else {
+      el.requestFullscreen();
+    }
+  };
+
+  // 전체화면 상태 동기화
+  useEffect(() => {
+    const syncFullscreen = () => {
+      const el = theaterRef.current;
+      const fs =
+        !!document.fullscreenElement && document.fullscreenElement === el;
+      setIsFullscreen(fs);
+      if (!fs) setIsCommentPanelOpen(false);
+    };
+    document.addEventListener("fullscreenchange", syncFullscreen);
+    document.addEventListener("webkitfullscreenchange", syncFullscreen);
+    return () => {
+      document.removeEventListener("fullscreenchange", syncFullscreen);
+      document.removeEventListener("webkitfullscreenchange", syncFullscreen);
+    };
+  }, []);
+
   // 콘텐츠 로드
   useEffect(() => {
     if (id) {
+      // 콘텐츠 전환 시 상태 리셋
+      setIsCommentPanelOpen(false);
+      setPlayInfo(null);
+      setPlayError(null);
+      setCurrentEpisode(null);
+      // 전체화면 중이면 해제 후 상태 리셋
+      if (document.fullscreenElement) {
+        document
+          .exitFullscreen()
+          .then(() => {
+            setIsFullscreen(false);
+          })
+          .catch(() => {
+            setIsFullscreen(false);
+          });
+      } else {
+        setIsFullscreen(false);
+      }
       loadContent();
     }
   }, [id]);
@@ -330,58 +378,138 @@ const ContentDetailPage: React.FC = () => {
               content.isSeries ? "lg:col-span-2" : "max-w-5xl mx-auto w-full"
             }
           >
-            {/* 비디오 플레이어 영역 */}
-            <div className="mb-6" ref={videoPlayerRef}>
-              {playLoading ? (
-                <div className="aspect-video bg-gray-900 flex items-center justify-center rounded-lg">
-                  <div className="text-center">
-                    <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-                    <p className="text-gray-400">재생 정보 로딩 중...</p>
+            {/* 비디오 플레이어 영역 + 댓글 사이드 패널 */}
+            <div
+              key={id}
+              className={`mb-6 flex overflow-hidden rounded-lg ${isFullscreen ? "bg-black h-screen" : ""}`}
+              ref={theaterRef}
+            >
+              <div className="flex-1 min-w-0">
+                {playLoading ? (
+                  <div className="aspect-video bg-gray-900 flex items-center justify-center rounded-lg">
+                    <div className="text-center">
+                      <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                      <p className="text-gray-400">재생 정보 로딩 중...</p>
+                    </div>
                   </div>
-                </div>
-              ) : !user ? (
-                <div className="aspect-video bg-gray-900 flex items-center justify-center rounded-lg">
-                  <div className="text-center">
-                    <AlertCircle className="w-12 h-12 text-gray-500 mx-auto mb-4" />
-                    <p className="text-xl mb-4">로그인이 필요합니다.</p>
-                    <button
-                      onClick={() => navigate("/login")}
-                      className="btn-primary"
-                    >
-                      로그인
-                    </button>
-                  </div>
-                </div>
-              ) : playError ? (
-                <div className="aspect-video bg-gray-900 flex items-center justify-center rounded-lg">
-                  <div className="text-center">
-                    <AlertCircle className="w-12 h-12 text-gray-500 mx-auto mb-4" />
-                    <p className="text-xl mb-4">{playError}</p>
-                    {playError.includes("구독") && (
+                ) : !user ? (
+                  <div className="aspect-video bg-gray-900 flex items-center justify-center rounded-lg">
+                    <div className="text-center">
+                      <AlertCircle className="w-12 h-12 text-gray-500 mx-auto mb-4" />
+                      <p className="text-xl mb-4">로그인이 필요합니다.</p>
                       <button
-                        onClick={() => navigate("/subscribe")}
+                        onClick={() => navigate("/login")}
                         className="btn-primary"
                       >
-                        구독하기
+                        로그인
                       </button>
+                    </div>
+                  </div>
+                ) : playError ? (
+                  <div className="aspect-video bg-gray-900 flex items-center justify-center rounded-lg">
+                    <div className="text-center">
+                      <AlertCircle className="w-12 h-12 text-gray-500 mx-auto mb-4" />
+                      <p className="text-xl mb-4">{playError}</p>
+                      {playError.includes("구독") && (
+                        <button
+                          onClick={() => navigate("/subscribe")}
+                          className="btn-primary"
+                        >
+                          구독하기
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ) : videoUrl ? (
+                  <VideoPlayer
+                    videoUrl={videoUrl}
+                    onTimeUpdate={handleTimeUpdate}
+                    onToggleComments={() =>
+                      setIsCommentPanelOpen((prev) => !prev)
+                    }
+                    onToggleFullscreen={handleToggleFullscreen}
+                    isCommentOpen={isCommentPanelOpen}
+                    isFullscreen={isFullscreen}
+                    startTime={startPosition}
+                    autoPlay={shouldAutoPlay}
+                  />
+                ) : (
+                  <div className="aspect-video bg-gray-900 flex items-center justify-center rounded-lg">
+                    <div className="text-center">
+                      <AlertCircle className="w-12 h-12 text-gray-500 mx-auto mb-4" />
+                      <p className="text-gray-400">
+                        재생 가능한 영상이 없습니다.
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* 댓글 사이드 패널 (전체화면 + 댓글 열림일 때만) */}
+              {isFullscreen && isCommentPanelOpen && (
+                <div className="w-[400px] flex-shrink-0 bg-gray-900 border-l border-gray-800 flex flex-col overflow-hidden">
+                  <div className="flex items-center justify-between p-4 border-b border-gray-800 flex-shrink-0">
+                    <h3 className="font-bold text-lg">
+                      댓글 {comments.length}개
+                    </h3>
+                    <button
+                      onClick={() => setIsCommentPanelOpen(false)}
+                      className="text-gray-400 hover:text-white transition-colors text-xl leading-none"
+                    >
+                      ✕
+                    </button>
+                  </div>
+
+                  <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0">
+                    {comments.length === 0 ? (
+                      <p className="text-center text-gray-500 py-8 text-sm">
+                        첫 댓글을 작성해보세요!
+                      </p>
+                    ) : (
+                      comments.map((comment) => (
+                        <div
+                          key={comment.id}
+                          className="border-b border-gray-800 pb-3"
+                        >
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="font-semibold text-sm">
+                              {comment.userName}
+                            </span>
+                            <span className="text-xs text-gray-500">
+                              {formatDate(comment.createdAt)}
+                            </span>
+                          </div>
+                          <p className="text-gray-300 text-sm">
+                            {comment.content}
+                          </p>
+                        </div>
+                      ))
                     )}
                   </div>
-                </div>
-              ) : videoUrl ? (
-                <VideoPlayer
-                  videoUrl={videoUrl}
-                  onTimeUpdate={handleTimeUpdate}
-                  startTime={startPosition}
-                  autoPlay={shouldAutoPlay}
-                />
-              ) : (
-                <div className="aspect-video bg-gray-900 flex items-center justify-center rounded-lg">
-                  <div className="text-center">
-                    <AlertCircle className="w-12 h-12 text-gray-500 mx-auto mb-4" />
-                    <p className="text-gray-400">
-                      재생 가능한 영상이 없습니다.
-                    </p>
-                  </div>
+
+                  {user && (
+                    <form
+                      onSubmit={handleCommentSubmit}
+                      className="p-4 border-t border-gray-800 flex-shrink-0"
+                    >
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={commentText}
+                          onChange={(e) => setCommentText(e.target.value)}
+                          placeholder="댓글 추가..."
+                          className="flex-1 bg-transparent border-b border-gray-700 focus:border-primary outline-none py-2 text-sm"
+                        />
+                        <button
+                          type="submit"
+                          disabled={!commentText.trim()}
+                          className="text-primary disabled:opacity-30 transition-opacity"
+                        >
+                          <Send className="w-5 h-5" />
+                        </button>
+                      </div>
+                    </form>
+                  )}
                 </div>
               )}
             </div>
