@@ -16,24 +16,67 @@ export const apiClient = axios.create({
   },
 });
 
-// Request 인터셉터 - 토큰 자동 추가
+// 토큰 재발급 중복 방지
+let isRefreshing = false;
+let refreshPromise: Promise<string | null> | null = null;
+
+const doRefreshToken = async (): Promise<string | null> => {
+  const refreshToken = localStorage.getItem("refreshToken");
+  if (!refreshToken) return null;
+
+  try {
+    const response = await axios.post(
+      `${API_BASE_URL || ""}/api/auth/reissue`,
+      { refreshToken },
+      { headers: { "Content-Type": "application/json" } },
+    );
+    const { accessToken, refreshToken: newRefreshToken } = response.data.data;
+    localStorage.setItem("accessToken", accessToken);
+    if (newRefreshToken) {
+      localStorage.setItem("refreshToken", newRefreshToken);
+    }
+    return accessToken;
+  } catch {
+    // refresh token도 만료 → 로그아웃
+    localStorage.clear();
+    window.location.href = "/login";
+    return null;
+  }
+};
+
+// Request 인터셉터 - 토큰 자동 추가 (만료 시 선제적 재발급)
 apiClient.interceptors.request.use(
-  (config: InternalAxiosRequestConfig) => {
-    const token = localStorage.getItem("accessToken");
+  async (config: InternalAxiosRequestConfig) => {
+    let token = localStorage.getItem("accessToken");
+
     if (token && config.headers) {
-      // 토큰 만료 여부 간단 체크 (JWT payload의 exp)
       try {
         const payload = JSON.parse(atob(token.split(".")[1]));
-        if (payload.exp && payload.exp * 1000 < Date.now()) {
-          // 만료된 토큰은 보내지 않음 (reissue는 response 인터셉터에서 처리)
-          localStorage.removeItem("accessToken");
-        } else {
-          config.headers.Authorization = `Bearer ${token}`;
+        const now = Date.now();
+        const expMs = payload.exp * 1000;
+
+        // 만료됐거나 1분 이내 만료 예정이면 선제적으로 재발급
+        if (expMs - now < 60_000) {
+          if (!isRefreshing) {
+            isRefreshing = true;
+            refreshPromise = doRefreshToken();
+          }
+          const newToken = await refreshPromise;
+          isRefreshing = false;
+          refreshPromise = null;
+
+          if (newToken) {
+            token = newToken;
+          } else {
+            return config;
+          }
         }
       } catch {
-        // 파싱 실패하면 토큰 제거
+        // 파싱 실패 시 토큰 제거
         localStorage.removeItem("accessToken");
+        return config;
       }
+      config.headers.Authorization = `Bearer ${token}`;
     }
     return config;
   },
@@ -52,38 +95,28 @@ apiClient.interceptors.response.use(
       _retry?: boolean;
     };
 
-    // 401 에러 (토큰 만료) 처리
+    // 401 에러 (토큰 만료) 처리 - request 인터셉터에서 놓친 경우 fallback
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
 
       try {
-        const refreshToken = localStorage.getItem("refreshToken");
-        if (refreshToken) {
-          // 토큰 재발급 API 호출 (인터셉터 없는 별도 요청으로 무한루프 방지)
-          const response = await axios.post(
-            `${API_BASE_URL || ""}/api/auth/reissue`,
-            { refreshToken },
-            { headers: { "Content-Type": "application/json" } },
-          );
+        if (!isRefreshing) {
+          isRefreshing = true;
+          refreshPromise = doRefreshToken();
+        }
+        const newToken = await refreshPromise;
+        isRefreshing = false;
+        refreshPromise = null;
 
-          const { accessToken, refreshToken: newRefreshToken } =
-            response.data.data;
-          localStorage.setItem("accessToken", accessToken);
-          if (newRefreshToken) {
-            localStorage.setItem("refreshToken", newRefreshToken);
-          }
-
-          // 원래 요청 재시도
+        if (newToken) {
           if (originalRequest.headers) {
-            originalRequest.headers.Authorization = `Bearer ${accessToken}`;
+            originalRequest.headers.Authorization = `Bearer ${newToken}`;
           }
           return apiClient(originalRequest);
         }
       } catch (refreshError) {
-        // 리프레시 토큰도 만료됨 - 완전 로그아웃 처리
-        console.log("토큰 만료로 자동 로그아웃");
-        localStorage.clear();
-        window.location.href = "/login";
+        isRefreshing = false;
+        refreshPromise = null;
         return Promise.reject(refreshError);
       }
     }

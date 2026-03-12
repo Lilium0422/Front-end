@@ -20,9 +20,13 @@ interface ContentModalProps {
   simpleMode?: boolean; // 간소화 모드 (북마크에서 온 경우)
 }
 
-const ContentModal: React.FC<ContentModalProps> = ({ content, onClose }) => {
+const ContentModal: React.FC<ContentModalProps> = ({
+  content: initialContent,
+  onClose,
+}) => {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const [content, setContent] = useState<Content>(initialContent);
   const [isBookmarked, setIsBookmarked] = useState(false);
   const [isMuted, setIsMuted] = useState(true);
   const [episodes, setEpisodes] = useState<any[]>([]);
@@ -32,10 +36,33 @@ const ContentModal: React.FC<ContentModalProps> = ({ content, onClose }) => {
     document.body.style.overflow = "hidden";
     checkBookmark();
     loadEpisodes();
+    // 감독/출연 등 상세 정보가 없으면 상세 API로 보강
+    if (!initialContent.director && !initialContent.actor) {
+      enrichContent();
+    }
     return () => {
       document.body.style.overflow = "unset";
     };
   }, []);
+
+  const enrichContent = async () => {
+    try {
+      const full = await contentService.getContentById(initialContent.id);
+      setContent((prev) => ({
+        ...prev,
+        description: full.description || prev.description,
+        director: full.director || prev.director,
+        actor: full.actor || prev.actor,
+        releaseDate: full.releaseDate || prev.releaseDate,
+        uploaderName: full.uploaderName || prev.uploaderName,
+        viewCount: full.viewCount ?? prev.viewCount,
+        isSeries: full.isSeries ?? prev.isSeries,
+        type: full.type || prev.type,
+      }));
+    } catch {
+      // 실패 시 기존 데이터 유지
+    }
+  };
 
   const loadEpisodes = async () => {
     if (content.type !== "series" && !content.isSeries) return;
@@ -238,10 +265,32 @@ const ContentModal: React.FC<ContentModalProps> = ({ content, onClose }) => {
 
             <div className="col-span-1">
               <div className="space-y-3 text-sm">
-                <div>
-                  <span className="text-gray-500">업로더: </span>
-                  <span className="text-gray-300">{content.uploaderName}</span>
-                </div>
+                {content.director && (
+                  <div>
+                    <span className="text-gray-500">감독: </span>
+                    <span className="text-gray-300">{content.director}</span>
+                  </div>
+                )}
+                {content.actor && (
+                  <div>
+                    <span className="text-gray-500">출연: </span>
+                    <span className="text-gray-300">{content.actor}</span>
+                  </div>
+                )}
+                {content.releaseDate && (
+                  <div>
+                    <span className="text-gray-500">개봉일: </span>
+                    <span className="text-gray-300">{content.releaseDate}</span>
+                  </div>
+                )}
+                {content.uploaderName && (
+                  <div>
+                    <span className="text-gray-500">업로더: </span>
+                    <span className="text-gray-300">
+                      {content.uploaderName}
+                    </span>
+                  </div>
+                )}
                 <div>
                   <span className="text-gray-500">태그: </span>
                   <div className="flex flex-wrap gap-1 mt-1">
@@ -257,59 +306,62 @@ const ContentModal: React.FC<ContentModalProps> = ({ content, onClose }) => {
             </div>
           </div>
 
-          {/* 시리즈 에피소드 목록 */}
-          {(content.isSeries || content.type === "series") && (
-            <div className="mt-8 border-t border-gray-800 pt-8">
-              <h3 className="text-2xl font-bold mb-4">에피소드</h3>
-              {loadingEpisodes ? (
-                <div className="text-center py-8 text-gray-400">로딩 중...</div>
-              ) : episodes.length > 0 ? (
-                <div className="space-y-3">
-                  {episodes.map((episode) => (
-                    <div
-                      key={episode.videoId}
-                      onClick={() =>
-                        handleEpisodeClick(episode.videoId.toString())
-                      }
-                      className="flex items-start space-x-4 p-4 bg-gray-800 hover:bg-gray-700 rounded-lg cursor-pointer transition-colors group"
-                    >
-                      <div className="flex-shrink-0 relative">
-                        <img
-                          src={
-                            episode.thumbnailUrl ||
-                            content.thumbnail ||
-                            content.thumbnailUrl
-                          }
-                          alt={episode.title}
-                          className="w-32 h-18 object-cover rounded"
-                        />
-                        <div className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity rounded">
-                          <Play className="w-8 h-8 fill-current" />
+          {/* 시리즈 에피소드 목록 (SINGLE이 아닌 경우만) */}
+          {(content.isSeries || content.type === "series") &&
+            content.type !== "movie" && (
+              <div className="mt-8 border-t border-gray-800 pt-8">
+                <h3 className="text-2xl font-bold mb-4">에피소드</h3>
+                {loadingEpisodes ? (
+                  <div className="text-center py-8 text-gray-400">
+                    로딩 중...
+                  </div>
+                ) : episodes.length > 0 ? (
+                  <div className="space-y-3">
+                    {episodes.map((episode) => (
+                      <div
+                        key={episode.videoId}
+                        onClick={() =>
+                          handleEpisodeClick(episode.videoId.toString())
+                        }
+                        className="flex items-start space-x-4 p-4 bg-gray-800 hover:bg-gray-700 rounded-lg cursor-pointer transition-colors group"
+                      >
+                        <div className="flex-shrink-0 relative">
+                          <img
+                            src={
+                              episode.thumbnailUrl ||
+                              content.thumbnail ||
+                              content.thumbnailUrl
+                            }
+                            alt={episode.title}
+                            className="w-32 h-18 object-cover rounded"
+                          />
+                          <div className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity rounded">
+                            <Play className="w-8 h-8 fill-current" />
+                          </div>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-start justify-between mb-2">
+                            <h4 className="font-semibold text-lg">
+                              {episode.episodeNo}화. {episode.title}
+                            </h4>
+                            <span className="text-sm text-gray-400 ml-2">
+                              {formatDuration(episode.durationSec || 0)}
+                            </span>
+                          </div>
+                          <p className="text-sm text-gray-400 line-clamp-2">
+                            {episode.description || ""}
+                          </p>
                         </div>
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-start justify-between mb-2">
-                          <h4 className="font-semibold text-lg">
-                            {episode.episodeNo}화. {episode.title}
-                          </h4>
-                          <span className="text-sm text-gray-400 ml-2">
-                            {formatDuration(episode.durationSec || 0)}
-                          </span>
-                        </div>
-                        <p className="text-sm text-gray-400 line-clamp-2">
-                          {episode.description || ""}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-8 text-gray-400">
-                  에피소드가 없습니다.
-                </div>
-              )}
-            </div>
-          )}
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-gray-400">
+                    에피소드가 없습니다.
+                  </div>
+                )}
+              </div>
+            )}
         </div>
       </div>
     </div>

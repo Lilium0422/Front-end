@@ -20,6 +20,7 @@ import { bookmarkService } from "@/services/bookmarkService";
 import { commentService, type CommentDto } from "@/services/commentService";
 import { useAuth } from "@/contexts/AuthContext";
 import VideoPlayer from "@/components/common/VideoPlayer";
+import ConfirmModal from "@/components/common/ConfirmModal";
 
 const ContentDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -42,6 +43,9 @@ const ContentDetailPage: React.FC = () => {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [editingCommentId, setEditingCommentId] = useState<number | null>(null);
   const [editingCommentText, setEditingCommentText] = useState("");
+  const [deleteTargetCommentId, setDeleteTargetCommentId] = useState<
+    number | null
+  >(null);
 
   const shouldAutoPlay = searchParams.get("autoplay") === "true";
   const episodeParam = searchParams.get("episode");
@@ -325,9 +329,9 @@ const ContentDetailPage: React.FC = () => {
 
   const handleDeleteComment = async (commentId: number) => {
     if (!currentVideoIdRef.current || !user) return;
-    if (!confirm("댓글을 삭제하시겠습니까?")) return;
     try {
       await commentService.deleteComment(currentVideoIdRef.current, commentId);
+      setDeleteTargetCommentId(null);
       loadComments();
     } catch (error) {
       console.error("댓글 삭제 실패:", error);
@@ -575,7 +579,7 @@ const ContentDetailPage: React.FC = () => {
                                 </button>
                                 <button
                                   onClick={() =>
-                                    handleDeleteComment(comment.commentId)
+                                    setDeleteTargetCommentId(comment.commentId)
                                   }
                                   className="text-xs text-gray-500 hover:text-red-400 transition-colors"
                                 >
@@ -847,7 +851,7 @@ const ContentDetailPage: React.FC = () => {
                             </button>
                             <button
                               onClick={() =>
-                                handleDeleteComment(comment.commentId)
+                                setDeleteTargetCommentId(comment.commentId)
                               }
                               className="text-xs text-gray-500 hover:text-red-400 transition-colors"
                             >
@@ -923,6 +927,16 @@ const ContentDetailPage: React.FC = () => {
             )}
         </div>
       </div>
+
+      {deleteTargetCommentId !== null && (
+        <ConfirmModal
+          message="댓글을 삭제하시겠습니까?"
+          confirmText="삭제"
+          cancelText="취소"
+          onConfirm={() => handleDeleteComment(deleteTargetCommentId)}
+          onCancel={() => setDeleteTargetCommentId(null)}
+        />
+      )}
     </div>
   );
 };

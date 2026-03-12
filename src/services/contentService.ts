@@ -4,6 +4,53 @@ import { Content } from "@/types";
 // 개발 모드: Mock 사용 여부
 const USE_MOCK = false; // 콘텐츠 API는 실제 API 사용
 
+// 백엔드 응답 → Content 변환 헬퍼
+const mapContentItem = (item: any): Content => {
+  const rawType =
+    item.type ??
+    item.contentType ??
+    item.content?.type ??
+    item.content?.contentType;
+  return {
+    id: (item.contentId ?? item.content?.contentId)?.toString(),
+    title: item.title ?? item.content?.title,
+    thumbnail: item.thumbnailUrl ?? item.content?.thumbnailUrl,
+    thumbnailUrl: item.thumbnailUrl ?? item.content?.thumbnailUrl,
+    type: rawType === "SINGLE" ? "movie" : "series",
+    isSeries: rawType === "SERIES",
+    category:
+      (item.tags ?? item.content?.tags)?.[0]?.name ??
+      (item.tags ?? item.content?.tags)?.[0] ??
+      "기타",
+    tags: (item.tags ?? item.content?.tags ?? []).map((tag: any) =>
+      typeof tag === "string" ? tag : tag.name,
+    ),
+    rating: 0,
+    year: item.createdAt
+      ? new Date(item.createdAt).getFullYear()
+      : item.content?.createdAt
+        ? new Date(item.content.createdAt).getFullYear()
+        : new Date().getFullYear(),
+    duration: rawType === "SINGLE" ? "미정" : "시리즈",
+    description:
+      item.description?.summary ??
+      item.description?.description ??
+      item.content?.description?.summary ??
+      "",
+    director:
+      item.description?.director ?? item.content?.description?.director ?? "",
+    actor: item.description?.actor ?? item.content?.description?.actor ?? "",
+    releaseDate:
+      item.description?.release ?? item.content?.description?.release ?? "",
+    accessLevel: item.accessLevel ?? item.content?.accessLevel,
+    bookmarkCount: item.bookmarkCount ?? item.content?.bookmarkCount,
+    viewCount: item.totalViewCount ?? item.content?.totalViewCount,
+    uploaderName: item.uploaderName ?? item.content?.uploaderName ?? "",
+    uploadDate: item.createdAt ?? item.content?.createdAt,
+    status: item.status ?? item.content?.status,
+  };
+};
+
 // Mock 데이터
 const mockContents: Content[] = [
   {
@@ -34,25 +81,31 @@ export const contentService = {
       });
 
       return response.data.data.map((item: any) => ({
+        ...mapContentItem(item.content ? item : { ...item.content }),
+        // trending 전용 필드
         id: item.content.contentId.toString(),
+        rank: item.rank,
+        trendingScore: item.trendingScore,
+        // content 객체에서 직접 매핑
         title: item.content.title,
         thumbnail: item.content.thumbnailUrl,
         thumbnailUrl: item.content.thumbnailUrl,
         type: item.content.type === "SINGLE" ? "movie" : "series",
+        isSeries: item.content.type === "SERIES",
         category: item.content.tags[0]?.name || "기타",
         tags: item.content.tags.map((tag: any) => tag.name),
-        rating: 0,
         year: new Date(item.content.createdAt).getFullYear(),
-        duration: item.content.type === "SINGLE" ? "미정" : "시리즈",
         description:
           item.content.description?.summary ||
           item.content.description?.description ||
           "",
+        director: item.content.description?.director || "",
+        actor: item.content.description?.actor || "",
+        releaseDate: item.content.description?.release || "",
         accessLevel: item.content.accessLevel,
         bookmarkCount: item.content.bookmarkCount,
         viewCount: item.content.totalViewCount,
-        rank: item.rank,
-        trendingScore: item.trendingScore,
+        uploaderName: item.content.uploaderName || "",
       }));
     } catch (error) {
       console.error("인기 차트 조회 실패:", error);
@@ -80,22 +133,9 @@ export const contentService = {
         params: { extended },
       });
 
-      const items = response.data.data.items.map((item: any) => ({
-        id: item.contentId.toString(),
-        title: item.title,
-        thumbnail: item.thumbnailUrl,
-        thumbnailUrl: item.thumbnailUrl,
-        type: item.contentType === "SINGLE" ? "movie" : "series",
-        category: item.tags[0] || "기타",
-        tags: item.tags,
-        rating: 0,
-        year: new Date().getFullYear(),
-        duration: item.contentType === "SINGLE" ? "미정" : "시리즈",
-        description: "",
-        accessLevel: item.accessLevel,
-        bookmarkCount: item.bookmarkCount,
-        viewCount: item.totalViewCount,
-      }));
+      const items = response.data.data.items.map((item: any) =>
+        mapContentItem(item),
+      );
 
       return {
         items,
@@ -124,23 +164,7 @@ export const contentService = {
         params,
       });
 
-      // 백엔드 응답을 프론트엔드 Content 타입으로 변환
-      return response.data.data.map((item: any) => ({
-        id: item.contentId.toString(),
-        title: item.title,
-        thumbnail: item.thumbnailUrl,
-        type: item.type === "SINGLE" ? "movie" : "series",
-        category: item.tags[0]?.name || "기타",
-        tags: item.tags.map((tag: any) => tag.name),
-        rating: 0, // API에 없음
-        year: new Date(item.createdAt).getFullYear(),
-        duration: item.type === "SINGLE" ? "미정" : `시리즈`,
-        description:
-          item.description?.summary || item.description?.description || "",
-        accessLevel: item.accessLevel,
-        bookmarkCount: item.bookmarkCount,
-        viewCount: item.totalViewCount,
-      }));
+      return response.data.data.map((item: any) => mapContentItem(item));
     } catch (error) {
       console.error("콘텐츠 목록 조회 실패:", error);
       throw error;
@@ -157,22 +181,7 @@ export const contentService = {
     try {
       const response = await apiClient.get("/api/contents/home/watching-list");
 
-      return response.data.data.map((item: any) => ({
-        id: item.contentId.toString(),
-        title: item.title,
-        thumbnail: item.thumbnailUrl,
-        type: item.type === "SINGLE" ? "movie" : "series",
-        category: item.tags[0]?.name || "기타",
-        tags: item.tags.map((tag: any) => tag.name),
-        rating: 0,
-        year: new Date(item.createdAt).getFullYear(),
-        duration: item.type === "SINGLE" ? "미정" : `시리즈`,
-        description:
-          item.description?.summary || item.description?.description || "",
-        accessLevel: item.accessLevel,
-        bookmarkCount: item.bookmarkCount,
-        viewCount: item.totalViewCount,
-      }));
+      return response.data.data.map((item: any) => mapContentItem(item));
     } catch (error) {
       console.error("시청 중인 콘텐츠 조회 실패:", error);
       return []; // 로그인 안 했을 수 있으니 빈 배열 반환
@@ -189,22 +198,7 @@ export const contentService = {
     try {
       const response = await apiClient.get("/api/contents/home/bookmark-list");
 
-      return response.data.data.map((item: any) => ({
-        id: item.contentId.toString(),
-        title: item.title,
-        thumbnail: item.thumbnailUrl,
-        type: item.type === "SINGLE" ? "movie" : "series",
-        category: item.tags[0]?.name || "기타",
-        tags: item.tags.map((tag: any) => tag.name),
-        rating: 0,
-        year: new Date(item.createdAt).getFullYear(),
-        duration: item.type === "SINGLE" ? "미정" : `시리즈`,
-        description:
-          item.description?.summary || item.description?.description || "",
-        accessLevel: item.accessLevel,
-        bookmarkCount: item.bookmarkCount,
-        viewCount: item.totalViewCount,
-      }));
+      return response.data.data.map((item: any) => mapContentItem(item));
     } catch (error) {
       console.error("찜 목록 조회 실패:", error);
       return [];
@@ -224,6 +218,18 @@ export const contentService = {
       const response = await apiClient.get(`/api/contents/${contentId}`);
       const item = response.data;
 
+      // ContentDetailResponse의 description은 plain string(JSON)이므로 파싱
+      if (
+        typeof item.description === "string" &&
+        item.description.startsWith("{")
+      ) {
+        try {
+          item.description = JSON.parse(item.description);
+        } catch {
+          // 파싱 실패 시 원본 유지
+        }
+      }
+
       // 에피소드(비디오) 목록 조회
       // SERIES: episodes-list API로 videoId 목록 가져옴
       // SINGLE: episodes-list API가 에러를 던지므로 try-catch로 처리
@@ -239,27 +245,9 @@ export const contentService = {
       }
 
       return {
-        id: item.contentId.toString(),
-        title: item.title,
-        thumbnail: item.thumbnailUrl,
-        thumbnailUrl: item.thumbnailUrl,
-        type: item.type === "SINGLE" ? "movie" : "series",
-        category: item.tags[0]?.name || "기타",
-        tags: item.tags.map((tag: any) => tag.name),
-        rating: 0,
-        year: new Date(item.createdAt).getFullYear(),
-        duration: item.type === "SINGLE" ? "미정" : `시리즈`,
-        description:
-          item.description?.summary || item.description?.description || "",
-        accessLevel: item.accessLevel,
-        bookmarkCount: item.bookmarkCount,
-        viewCount: item.totalViewCount,
-        uploadDate: item.createdAt,
-        uploaderName: "sample_uploader",
+        ...mapContentItem(item),
         uploaderId: item.uploaderId?.toString() || "1",
-        status: item.status,
         isOriginal: item.accessLevel === "UPLUS",
-        isSeries: item.type === "SERIES",
         videoUrl: "", // play API에서 실제 URL을 가져옴
         episodes: episodes.map((ep: any) => ({
           id: ep.videoId.toString(),
