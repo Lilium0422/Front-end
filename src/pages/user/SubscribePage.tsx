@@ -16,7 +16,7 @@ const SubscribePage: React.FC = () => {
   const [loadingSub, setLoadingSub] = useState(true);
   const [subscribing, setSubscribing] = useState(false);
   const [showCancelModal, setShowCancelModal] = useState(false);
-  const [canceling, setCanceling] = useState(false);
+  const [_canceling, setCanceling] = useState(false);
 
   // U+ 인증
   const [phoneNumber, setPhoneNumber] = useState("");
@@ -133,7 +133,6 @@ const SubscribePage: React.FC = () => {
 
   const isPaid = subInfo?.paid === true;
   const isUplus = user?.isLGUPlus === true;
-  const isActive = subInfo?.displayStatus === "ACTIVE";
   const isCanceled = subInfo?.subscriptionStatus === "CANCELED";
 
   const getMemberStatus = () => {
