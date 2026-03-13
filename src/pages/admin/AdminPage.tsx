@@ -10,7 +10,10 @@ import {
   X,
   ChevronLeft,
   ChevronRight,
+  Shield,
 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
 import { adminService } from "@/services/adminService";
 import type { AdminUser, AdminUserDetail } from "@/types";
 import {
@@ -26,8 +29,36 @@ import { ADMIN_CONSTANTS } from "@/constants";
 type TabType = "users" | "contents" | "stats";
 
 const AdminPage: React.FC = () => {
+  const { user, loading: authLoading } = useAuth();
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<TabType>("users");
   const [searchKeyword, setSearchKeyword] = useState("");
+
+  // 로그인 안 됐거나 ADMIN이 아니면 접근 차단
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-dark flex items-center justify-center">
+        <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (!user || user.role !== "ADMIN") {
+    return (
+      <div className="min-h-screen bg-dark flex items-center justify-center">
+        <div className="text-center">
+          <Shield className="w-16 h-16 text-gray-600 mx-auto mb-4" />
+          <h2 className="text-2xl font-bold mb-2">접근 권한이 없습니다</h2>
+          <p className="text-gray-400 mb-6">
+            관리자 계정으로 로그인해야 접근할 수 있습니다.
+          </p>
+          <button onClick={() => navigate("/login")} className="btn-primary">
+            로그인 페이지로 이동
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-dark">
