@@ -24,6 +24,7 @@ import {
   historyService,
   type WatchHistoryItem,
 } from "@/services/historyService";
+import { statsService, type WatchStatistics } from "@/services/historyService";
 import {
   subscriptionService,
   type SubscriptionInfo,
@@ -89,6 +90,10 @@ const MyPage: React.FC = () => {
   const [selectedTagIds, setSelectedTagIds] = useState<Set<number>>(new Set());
   const [savingTags, setSavingTags] = useState(false);
 
+  // 통계
+  const [watchStats, setWatchStats] = useState<WatchStatistics | null>(null);
+  const [statsLoading, setStatsLoading] = useState(false);
+
   useEffect(() => {
     // AuthContext 로딩 중이면 대기
     if (authLoading) return;
@@ -110,6 +115,9 @@ const MyPage: React.FC = () => {
     }
     if (activeTab === "subscription" && user) {
       loadSubscription();
+    }
+    if (activeTab === "stats" && user) {
+      loadWatchStats();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, user]);
@@ -288,6 +296,27 @@ const MyPage: React.FC = () => {
       // input 초기화 (같은 파일 재선택 가능하도록)
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
+  };
+
+  // === 통계 관련 함수 ===
+  const loadWatchStats = async () => {
+    setStatsLoading(true);
+    try {
+      const data = await statsService.getWatchStatistics();
+      setWatchStats(data);
+    } catch (error) {
+      console.error("시청 통계 조회 실패:", error);
+    } finally {
+      setStatsLoading(false);
+    }
+  };
+
+  const formatWatchTime = (seconds: number) => {
+    if (!seconds) return "0분";
+    const hours = Math.floor(seconds / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
+    if (hours > 0) return `${hours}시간 ${mins}분`;
+    return `${mins}분`;
   };
 
   // === 구독 관련 함수 ===
@@ -974,10 +1003,77 @@ const MyPage: React.FC = () => {
         {/* 통계 탭 */}
         {activeTab === "stats" && (
           <div className="max-w-4xl mx-auto">
-            <div className="text-center py-12">
-              <BarChart3 className="w-16 h-16 text-gray-600 mx-auto mb-4" />
-              <p className="text-gray-400">통계 기능은 추후 구현 예정입니다.</p>
-            </div>
+            {statsLoading ? (
+              <div className="text-center py-12">
+                <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
+              </div>
+            ) : !watchStats ? (
+              <div className="text-center py-12">
+                <BarChart3 className="w-16 h-16 text-gray-600 mx-auto mb-4" />
+                <p className="text-gray-400">
+                  통계 데이터를 불러올 수 없습니다.
+                </p>
+              </div>
+            ) : (
+              <>
+                {/* 요약 카드 */}
+                <div className="grid grid-cols-2 gap-6 mb-8">
+                  <div className="bg-gray-900 rounded-lg p-6 text-center">
+                    <Play className="w-8 h-8 text-primary mx-auto mb-2" />
+                    <p className="text-3xl font-bold">
+                      {watchStats.totalWatchedCount}
+                    </p>
+                    <p className="text-sm text-gray-400 mt-1">시청 완료</p>
+                  </div>
+                  <div className="bg-gray-900 rounded-lg p-6 text-center">
+                    <Clock className="w-8 h-8 text-primary mx-auto mb-2" />
+                    <p className="text-3xl font-bold">
+                      {formatWatchTime(watchStats.totalWatchTime)}
+                    </p>
+                    <p className="text-sm text-gray-400 mt-1">총 시청 시간</p>
+                  </div>
+                </div>
+
+                {/* 장르별 통계 */}
+                <div className="bg-gray-900 rounded-lg p-6">
+                  <h3 className="text-lg font-bold mb-6">장르별 시청 통계</h3>
+                  {watchStats.statisticsByGenre.length === 0 ? (
+                    <p className="text-gray-400 text-center py-4">
+                      아직 시청 데이터가 없습니다.
+                    </p>
+                  ) : (
+                    <div className="space-y-4">
+                      {watchStats.statisticsByGenre.map((genre) => (
+                        <div key={genre.tagId}>
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-sm font-medium">
+                              {genre.tagName}
+                            </span>
+                            <span className="text-sm text-gray-400">
+                              {genre.watchedCount}편 ·{" "}
+                              {formatWatchTime(genre.watchTime)} ·{" "}
+                              {genre.percentage}%
+                            </span>
+                          </div>
+                          <div className="w-full h-3 bg-gray-800 rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-primary rounded-full transition-all duration-500"
+                              style={{ width: `${genre.percentage}%` }}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {watchStats.updatedAt && (
+                    <p className="text-xs text-gray-500 mt-6 text-right">
+                      마지막 갱신:{" "}
+                      {new Date(watchStats.updatedAt).toLocaleString("ko-KR")}
+                    </p>
+                  )}
+                </div>
+              </>
+            )}
           </div>
         )}
 

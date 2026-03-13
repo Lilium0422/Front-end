@@ -40,6 +40,10 @@ export interface Content {
   director?: string;
   actor?: string;
   releaseDate?: string;
+  // 검색 결과 필드
+  highlightTitle?: string | null;
+  highlightDescription?: string | null;
+  matchType?: string;
 }
 
 export interface Episode {

@@ -70,3 +70,30 @@ export const historyService = {
     await apiClient.delete(`/api/users/me/watch-history/${historyId}`);
   },
 };
+
+// 장르별 통계
+export interface GenreStatistics {
+  tagId: number;
+  tagName: string;
+  watchedCount: number;
+  watchTime: number;
+  percentage: number;
+}
+
+// 시청 통계 응답
+export interface WatchStatistics {
+  totalWatchedCount: number;
+  totalWatchTime: number;
+  statisticsByGenre: GenreStatistics[];
+  updatedAt: string;
+}
+
+export const statsService = {
+  /** 시청 통계 조회 GET /api/users/me/watch-history/statistics */
+  getWatchStatistics: async (): Promise<WatchStatistics> => {
+    const response = await apiClient.get(
+      "/api/users/me/watch-history/statistics",
+    );
+    return response.data.data;
+  },
+};
