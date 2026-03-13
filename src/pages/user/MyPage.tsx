@@ -7,18 +7,35 @@ import {
   BarChart3,
   Settings,
   Camera,
+  Trash2,
+  Play,
+  Clock,
+  Crown,
+  Check,
+  Phone,
+  Shield,
+  Loader2,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { profileService } from "@/services/profileService";
 import { authService } from "@/services/authService";
 import { bookmarkService } from "@/services/bookmarkService";
+import {
+  historyService,
+  type WatchHistoryItem,
+} from "@/services/historyService";
+import {
+  subscriptionService,
+  type SubscriptionInfo,
+} from "@/services/subscriptionService";
+import ConfirmModal from "@/components/common/ConfirmModal";
 import type { Profile } from "@/types/profile";
 import type { BookmarkItem } from "@/types/bookmark";
 import ContentCard from "@/components/content/ContentCard";
 import ContentModal from "@/components/content/ContentModal";
 import type { Content } from "@/types";
 
-type Tab = "profile" | "bookmarks" | "history" | "stats";
+type Tab = "profile" | "bookmarks" | "history" | "stats" | "subscription";
 
 const MyPage: React.FC = () => {
   const { user, loading: authLoading, logout } = useAuth();
@@ -50,6 +67,22 @@ const MyPage: React.FC = () => {
   // 콘텐츠 모달
   const [selectedContent, setSelectedContent] = useState<Content | null>(null);
 
+  // 시청 이력
+  const [watchHistory, setWatchHistory] = useState<WatchHistoryItem[]>([]);
+  const [historyCursor, setHistoryCursor] = useState<number | null>(null);
+  const [hasMoreHistory, setHasMoreHistory] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
+
+  // 구독 관련
+  const [subInfo, setSubInfo] = useState<SubscriptionInfo | null>(null);
+  const [loadingSub, setLoadingSub] = useState(false);
+  const [subscribing, setSubscribing] = useState(false);
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [canceling, setCanceling] = useState(false);
+  const [phoneNumber, setPhoneNumber] = useState("");
+  const [verifying, setVerifying] = useState(false);
+  const [verifyResult, setVerifyResult] = useState<string | null>(null);
+
   useEffect(() => {
     // AuthContext 로딩 중이면 대기
     if (authLoading) return;
@@ -65,6 +98,12 @@ const MyPage: React.FC = () => {
   useEffect(() => {
     if (activeTab === "bookmarks" && user) {
       loadBookmarks();
+    }
+    if (activeTab === "history" && user) {
+      loadWatchHistory();
+    }
+    if (activeTab === "subscription" && user) {
+      loadSubscription();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, user]);
@@ -106,11 +145,38 @@ const MyPage: React.FC = () => {
   const handleBookmarkRemove = async (contentId: string) => {
     try {
       await bookmarkService.removeBookmark(parseInt(contentId));
-      // 북마크 목록 새로고침
       loadBookmarks();
     } catch (error) {
       console.error("북마크 삭제 실패:", error);
       alert("북마크 삭제에 실패했습니다.");
+    }
+  };
+
+  const loadWatchHistory = async (cursor?: number) => {
+    setHistoryLoading(true);
+    try {
+      const data = await historyService.getWatchHistory(cursor, 20);
+      if (cursor) {
+        setWatchHistory((prev) => [...prev, ...data.watchHistory]);
+      } else {
+        setWatchHistory(data.watchHistory);
+      }
+      setHistoryCursor(data.nextCursor ? parseInt(data.nextCursor) : null);
+      setHasMoreHistory(data.hasNext);
+    } catch (error) {
+      console.error("시청 이력 조회 실패:", error);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  const handleDeleteHistory = async (historyId: number) => {
+    try {
+      await historyService.deleteWatchHistory(historyId);
+      setWatchHistory((prev) => prev.filter((h) => h.historyId !== historyId));
+    } catch (error) {
+      console.error("시청 이력 삭제 실패:", error);
+      alert("시청 이력 삭제에 실패했습니다.");
     }
   };
 
@@ -218,6 +284,109 @@ const MyPage: React.FC = () => {
     }
   };
 
+  // === 구독 관련 함수 ===
+  const loadSubscription = async () => {
+    setLoadingSub(true);
+    try {
+      const info = await subscriptionService.getMySubscription();
+      setSubInfo(info);
+    } catch {
+      setSubInfo(null);
+    } finally {
+      setLoadingSub(false);
+    }
+  };
+
+  const handleSubscribe = async () => {
+    setSubscribing(true);
+    try {
+      await subscriptionService.subscribe("CARD");
+      alert("베이직 구독이 완료되었습니다!");
+      await refreshAuth();
+      loadSubscription();
+    } catch (error: any) {
+      alert(
+        error.response?.data?.message || "구독 처리 중 오류가 발생했습니다.",
+      );
+    } finally {
+      setSubscribing(false);
+    }
+  };
+
+  const handleCancel = async () => {
+    setCanceling(true);
+    try {
+      await subscriptionService.cancelSubscription();
+      setShowCancelModal(false);
+      alert("구독 해지가 예약되었습니다. 만료일까지 이용 가능합니다.");
+      await refreshAuth();
+      loadSubscription();
+    } catch (error: any) {
+      alert(error.response?.data?.message || "구독 해지에 실패했습니다.");
+    } finally {
+      setCanceling(false);
+    }
+  };
+
+  const handleVerifyUplus = async () => {
+    if (!phoneNumber.trim()) {
+      alert("전화번호를 입력해주세요.");
+      return;
+    }
+    const cleaned = phoneNumber.replace(/[^0-9]/g, "");
+    if (cleaned.length < 10) {
+      alert("올바른 전화번호를 입력해주세요.");
+      return;
+    }
+    setVerifying(true);
+    setVerifyResult(null);
+    try {
+      const result = await subscriptionService.verifyUplus(cleaned);
+      if (result.verified) {
+        setVerifyResult("success");
+        await refreshAuth();
+        loadSubscription();
+      } else {
+        setVerifyResult("fail");
+      }
+    } catch (error: any) {
+      setVerifyResult("fail");
+      alert(error.response?.data?.message || "인증에 실패했습니다.");
+    } finally {
+      setVerifying(false);
+    }
+  };
+
+  const refreshAuth = async () => {
+    try {
+      const refreshToken = localStorage.getItem("refreshToken");
+      if (refreshToken) {
+        const { default: axios } = await import("axios");
+        const baseUrl = import.meta.env.VITE_API_BASE_URL || "";
+        const response = await axios.post(
+          `${baseUrl}/api/auth/reissue`,
+          { refreshToken },
+          { headers: { "Content-Type": "application/json" } },
+        );
+        const { accessToken, refreshToken: newRefresh } = response.data.data;
+        localStorage.setItem("accessToken", accessToken);
+        if (newRefresh) localStorage.setItem("refreshToken", newRefresh);
+      }
+    } catch {
+      // 재발급 실패는 무시
+    }
+  };
+
+  const subIsPaid = subInfo?.paid === true;
+  const subIsUplus = user?.isLGUPlus === true;
+  const subIsCanceled = subInfo?.subscriptionStatus === "CANCELED";
+
+  const getMemberStatus = () => {
+    if (subIsUplus) return "LG U+ 회원";
+    if (subIsPaid) return "베이직 구독 회원";
+    return "일반 회원";
+  };
+
   const handleDeleteAccount = async () => {
     if (!profile) return;
     if (
@@ -249,6 +418,13 @@ const MyPage: React.FC = () => {
   }
 
   if (!user || !profile) return null;
+
+  const formatDuration = (seconds: number) => {
+    if (!seconds) return "0:00";
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, "0")}`;
+  };
 
   return (
     <div className="min-h-screen bg-dark">
@@ -300,6 +476,17 @@ const MyPage: React.FC = () => {
           >
             <BarChart3 className="w-5 h-5 inline mr-2" />
             통계
+          </button>
+          <button
+            onClick={() => handleTabChange("subscription")}
+            className={`pb-4 px-4 transition-colors ${
+              activeTab === "subscription"
+                ? "border-b-2 border-primary text-primary"
+                : "text-gray-400 hover:text-white"
+            }`}
+          >
+            <Crown className="w-5 h-5 inline mr-2" />
+            구독
           </button>
         </div>
 
@@ -438,12 +625,21 @@ const MyPage: React.FC = () => {
                     <p className="text-lg">{profile.nickname}</p>
                   </div>
                   <div>
+                    <p className="text-sm text-gray-400">회원 상태</p>
+                    <p className="text-lg">
+                      {profile.isUPlusMember
+                        ? "LG U+ 회원"
+                        : profile.subscriptionStatus === "SUBSCRIBED"
+                          ? "베이직 구독 회원"
+                          : "일반 회원"}
+                    </p>
+                  </div>
+                  <div>
                     <p className="text-sm text-gray-400">구독 상태</p>
                     <p className="text-lg">
-                      {profile.subscriptionStatus === "NONE"
-                        ? "미구독"
-                        : "구독 중"}
-                      {profile.isUPlusMember && " (U+ 회원)"}
+                      {profile.subscriptionStatus === "SUBSCRIBED"
+                        ? "구독 중"
+                        : "미구독"}
                     </p>
                   </div>
                   <div>
@@ -468,25 +664,6 @@ const MyPage: React.FC = () => {
                 </div>
               )}
             </div>
-
-            {/* 구독 관리 */}
-            {profile.subscriptionStatus === "NONE" &&
-              !profile.isUPlusMember && (
-                <div className="bg-gray-900 rounded-lg p-6 mb-6">
-                  <h3 className="text-lg font-bold mb-3">
-                    구독하고 더 많은 혜택을 누리세요
-                  </h3>
-                  <p className="text-gray-400 mb-4">
-                    모든 콘텐츠 시청, 배속 재생, 광고 없음
-                  </p>
-                  <button
-                    onClick={() => navigate("/subscribe")}
-                    className="btn-primary"
-                  >
-                    구독하기
-                  </button>
-                </div>
-              )}
 
             {/* 회원 탈퇴 */}
             <div className="bg-gray-900 rounded-lg p-6">
@@ -553,12 +730,137 @@ const MyPage: React.FC = () => {
         {/* 시청 이력 탭 */}
         {activeTab === "history" && (
           <div className="max-w-5xl mx-auto">
-            <div className="text-center py-12">
-              <History className="w-16 h-16 text-gray-600 mx-auto mb-4" />
-              <p className="text-gray-400">
-                시청 이력 기능은 추후 구현 예정입니다.
-              </p>
-            </div>
+            {historyLoading && watchHistory.length === 0 ? (
+              <div className="text-center py-12">
+                <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto"></div>
+              </div>
+            ) : watchHistory.length === 0 ? (
+              <div className="text-center py-12">
+                <History className="w-16 h-16 text-gray-600 mx-auto mb-4" />
+                <p className="text-gray-400 mb-4">시청 이력이 없습니다.</p>
+                <button onClick={() => navigate("/")} className="btn-primary">
+                  콘텐츠 둘러보기
+                </button>
+              </div>
+            ) : (
+              <>
+                <div className="space-y-3">
+                  {watchHistory.map((item) => (
+                    <div
+                      key={item.historyId}
+                      className="bg-gray-900 rounded-lg p-4 flex items-center gap-4 hover:bg-gray-800/80 transition-colors"
+                    >
+                      <div
+                        className="relative flex-shrink-0 cursor-pointer group"
+                        onClick={() =>
+                          navigate(
+                            `/content/${item.contentId}${item.episodeId ? `?episode=${item.episodeId}` : ""}`,
+                          )
+                        }
+                      >
+                        <img
+                          src={
+                            item.thumbnailUrl ||
+                            "https://via.placeholder.com/160x90?text=No+Image"
+                          }
+                          alt={item.title}
+                          className="w-40 h-[90px] object-cover rounded"
+                        />
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity rounded">
+                          <Play className="w-8 h-8 fill-current" />
+                        </div>
+                        {item.duration > 0 && (
+                          <div className="absolute bottom-0 left-0 right-0 h-1 bg-gray-700">
+                            <div
+                              className="h-full bg-primary"
+                              style={{
+                                width: `${Math.min(item.progressPercent, 100)}%`,
+                              }}
+                            />
+                          </div>
+                        )}
+                      </div>
+
+                      <div
+                        className="flex-1 min-w-0 cursor-pointer"
+                        onClick={() =>
+                          navigate(
+                            `/content/${item.contentId}${item.episodeId ? `?episode=${item.episodeId}` : ""}`,
+                          )
+                        }
+                      >
+                        <h3 className="font-semibold text-base line-clamp-1 mb-1">
+                          {item.title}
+                          {item.episodeTitle && (
+                            <span className="text-gray-400 font-normal">
+                              {" "}
+                              · {item.episodeNumber}화 {item.episodeTitle}
+                            </span>
+                          )}
+                        </h3>
+                        <div className="flex items-center gap-3 text-sm text-gray-400">
+                          <span className="flex items-center gap-1">
+                            <Clock className="w-3.5 h-3.5" />
+                            {formatDuration(item.lastPosition)} /{" "}
+                            {formatDuration(item.duration)}
+                          </span>
+                          <span>{item.progressPercent}% 시청</span>
+                          <span
+                            className={`px-2 py-0.5 rounded text-xs ${
+                              item.status === "COMPLETED"
+                                ? "bg-green-500/20 text-green-400"
+                                : item.status === "WATCHING"
+                                  ? "bg-blue-500/20 text-blue-400"
+                                  : "bg-gray-700 text-gray-400"
+                            }`}
+                          >
+                            {item.status === "COMPLETED"
+                              ? "시청 완료"
+                              : item.status === "WATCHING"
+                                ? "시청 중"
+                                : "시작됨"}
+                          </span>
+                        </div>
+                        <p className="text-xs text-gray-500 mt-1">
+                          {new Date(item.watchedAt).toLocaleDateString(
+                            "ko-KR",
+                            {
+                              year: "numeric",
+                              month: "long",
+                              day: "numeric",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            },
+                          )}
+                        </p>
+                      </div>
+
+                      <button
+                        onClick={() => handleDeleteHistory(item.historyId)}
+                        className="flex-shrink-0 p-2 text-gray-500 hover:text-red-400 transition-colors"
+                        title="시청 이력 삭제"
+                      >
+                        <Trash2 className="w-5 h-5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                {hasMoreHistory && (
+                  <div className="text-center mt-8">
+                    <button
+                      onClick={() =>
+                        loadWatchHistory(historyCursor ?? undefined)
+                      }
+                      disabled={historyLoading}
+                      className="btn-secondary"
+                    >
+                      {historyLoading ? "로딩 중..." : "더보기"}
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
           </div>
         )}
 
@@ -569,6 +871,279 @@ const MyPage: React.FC = () => {
               <BarChart3 className="w-16 h-16 text-gray-600 mx-auto mb-4" />
               <p className="text-gray-400">통계 기능은 추후 구현 예정입니다.</p>
             </div>
+          </div>
+        )}
+
+        {/* 구독 탭 */}
+        {activeTab === "subscription" && (
+          <div className="max-w-4xl mx-auto">
+            {loadingSub ? (
+              <div className="text-center py-12">
+                <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
+              </div>
+            ) : (
+              <>
+                <div className="bg-gray-900 rounded-lg p-6 mb-8 flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-400 mb-1">구독 상태</p>
+                    <p className="text-xl font-bold">{getMemberStatus()}</p>
+                  </div>
+                  <span
+                    className={`px-4 py-2 rounded-full text-sm font-bold ${
+                      subIsUplus
+                        ? "bg-green-500/20 text-green-400"
+                        : subIsPaid
+                          ? "bg-primary/20 text-primary"
+                          : "bg-gray-700 text-gray-400"
+                    }`}
+                  >
+                    {subIsUplus
+                      ? "U+ 인증"
+                      : subIsPaid
+                        ? subIsCanceled
+                          ? "해지 예약"
+                          : "구독 중"
+                        : "미구독"}
+                  </span>
+                </div>
+
+                <div className="grid md:grid-cols-2 gap-8">
+                  {/* 카드 1: 베이직 구독 */}
+                  <div className="bg-gray-900 rounded-lg p-8">
+                    <div className="flex items-center justify-between mb-4">
+                      <h2 className="text-2xl font-bold">베이직 구독</h2>
+                      <span
+                        className={`px-3 py-1 rounded-full text-xs font-bold ${
+                          subIsPaid
+                            ? "bg-primary/20 text-primary"
+                            : "bg-gray-700 text-gray-400"
+                        }`}
+                      >
+                        {subIsPaid
+                          ? subIsCanceled
+                            ? "해지 예약"
+                            : "구독 중"
+                          : "미구독"}
+                      </span>
+                    </div>
+
+                    <div className="text-3xl font-bold text-primary mb-6">
+                      ₩5,000
+                      <span className="text-lg text-gray-400">/월</span>
+                    </div>
+
+                    <ul className="space-y-3 mb-8">
+                      <li className="flex items-start">
+                        <Check className="w-5 h-5 text-primary mr-3 flex-shrink-0 mt-0.5" />
+                        <span>BASIC 콘텐츠 무제한 시청</span>
+                      </li>
+                      <li className="flex items-start">
+                        <Check className="w-5 h-5 text-primary mr-3 flex-shrink-0 mt-0.5" />
+                        <span>HD 1080p 화질</span>
+                      </li>
+                      <li className="flex items-start">
+                        <Check className="w-5 h-5 text-primary mr-3 flex-shrink-0 mt-0.5" />
+                        <span>배속 재생 기능</span>
+                      </li>
+                      <li className="flex items-start">
+                        <Check className="w-5 h-5 text-primary mr-3 flex-shrink-0 mt-0.5" />
+                        <span>광고 없음</span>
+                      </li>
+                    </ul>
+
+                    {subIsPaid && subInfo && (
+                      <div className="bg-gray-800 rounded-lg p-4 mb-6 text-sm space-y-2">
+                        <div className="flex justify-between">
+                          <span className="text-gray-400">시작일</span>
+                          <span>
+                            {new Date(subInfo.startedAt).toLocaleDateString(
+                              "ko-KR",
+                            )}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-400">만료일</span>
+                          <span>
+                            {new Date(subInfo.expiresAt).toLocaleDateString(
+                              "ko-KR",
+                            )}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-400">상태</span>
+                          <span
+                            className={
+                              subIsCanceled
+                                ? "text-yellow-400"
+                                : "text-green-400"
+                            }
+                          >
+                            {subIsCanceled
+                              ? "해지 예약 (만료일까지 이용 가능)"
+                              : "활성"}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
+                    {subIsUplus ? (
+                      <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4 text-center">
+                        <Shield className="w-8 h-8 text-blue-400 mx-auto mb-2" />
+                        <p className="text-blue-400 font-semibold text-sm">
+                          LG U+ 회원으로 인증되어 베이직 구독이 필요하지
+                          않습니다.
+                        </p>
+                      </div>
+                    ) : !subIsPaid ? (
+                      <button
+                        onClick={handleSubscribe}
+                        disabled={subscribing}
+                        className="w-full btn-primary py-3 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                      >
+                        {subscribing ? (
+                          <>
+                            <Loader2 className="w-5 h-5 animate-spin" />
+                            처리 중...
+                          </>
+                        ) : (
+                          "베이직 플랜 구독하기"
+                        )}
+                      </button>
+                    ) : subIsCanceled ? (
+                      <div className="space-y-3">
+                        <button
+                          onClick={handleSubscribe}
+                          disabled={subscribing}
+                          className="w-full btn-primary py-3 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                        >
+                          {subscribing ? (
+                            <>
+                              <Loader2 className="w-5 h-5 animate-spin" />
+                              처리 중...
+                            </>
+                          ) : (
+                            "다시 구독하기"
+                          )}
+                        </button>
+                        <p className="text-xs text-gray-500 text-center">
+                          해지 예약 상태입니다. 만료일까지 이용 가능하며, 다시
+                          구독하면 해지가 취소됩니다.
+                        </p>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => setShowCancelModal(true)}
+                        disabled={canceling}
+                        className="w-full py-3 rounded transition-colors bg-gray-700 hover:bg-gray-600 text-white"
+                      >
+                        구독 해지
+                      </button>
+                    )}
+                  </div>
+
+                  {/* 카드 2: LG U+ 회원 인증 */}
+                  <div className="bg-gray-900 rounded-lg p-8">
+                    <div className="flex items-center justify-between mb-4">
+                      <h2 className="text-2xl font-bold">LG U+ 회원 인증</h2>
+                      <span
+                        className={`px-3 py-1 rounded-full text-xs font-bold ${
+                          subIsUplus
+                            ? "bg-green-500/20 text-green-400"
+                            : "bg-gray-700 text-gray-400"
+                        }`}
+                      >
+                        {subIsUplus ? "인증 완료" : "미인증"}
+                      </span>
+                    </div>
+
+                    <p className="text-gray-400 mb-6">
+                      LG U+ 회원 인증 시 제공되는 혜택/연동 안내
+                    </p>
+
+                    <ul className="space-y-3 mb-8">
+                      <li className="flex items-start">
+                        <Check className="w-5 h-5 text-primary mr-3 flex-shrink-0 mt-0.5" />
+                        <span>모든 콘텐츠 무제한 시청 (오리지널 포함)</span>
+                      </li>
+                      <li className="flex items-start">
+                        <Check className="w-5 h-5 text-primary mr-3 flex-shrink-0 mt-0.5" />
+                        <span>4K UHD 화질 지원</span>
+                      </li>
+                      <li className="flex items-start">
+                        <Check className="w-5 h-5 text-primary mr-3 flex-shrink-0 mt-0.5" />
+                        <span>베이직 구독의 모든 혜택 포함</span>
+                      </li>
+                      <li className="flex items-start">
+                        <Check className="w-5 h-5 text-primary mr-3 flex-shrink-0 mt-0.5" />
+                        <span>통신사 회원 전용 혜택</span>
+                      </li>
+                    </ul>
+
+                    {subIsUplus ? (
+                      <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-4 text-center">
+                        <Shield className="w-8 h-8 text-green-400 mx-auto mb-2" />
+                        <p className="text-green-400 font-semibold">
+                          인증 완료
+                        </p>
+                      </div>
+                    ) : subIsPaid ? (
+                      <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4 text-center">
+                        <Crown className="w-8 h-8 text-yellow-400 mx-auto mb-2" />
+                        <p className="text-yellow-400 font-semibold text-sm">
+                          베이직 구독 중에는 U+ 인증을 할 수 없습니다.
+                          {subIsCanceled
+                            ? " 구독 만료 후 인증해주세요."
+                            : " 구독 해지 후 인증해주세요."}
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block text-sm text-gray-400 mb-2">
+                            <Phone className="w-4 h-4 inline mr-1" />
+                            전화번호 입력
+                          </label>
+                          <input
+                            type="tel"
+                            value={phoneNumber}
+                            onChange={(e) => setPhoneNumber(e.target.value)}
+                            placeholder="01012345678"
+                            className="w-full input-field"
+                            maxLength={13}
+                          />
+                        </div>
+
+                        {verifyResult === "fail" && (
+                          <p className="text-red-400 text-sm">
+                            LG U+ 회원이 아니거나 인증에 실패했습니다.
+                          </p>
+                        )}
+                        {verifyResult === "success" && (
+                          <p className="text-green-400 text-sm">
+                            LG U+ 회원 인증이 완료되었습니다!
+                          </p>
+                        )}
+
+                        <button
+                          onClick={handleVerifyUplus}
+                          disabled={verifying || !phoneNumber.trim()}
+                          className="w-full btn-primary py-3 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                        >
+                          {verifying ? (
+                            <>
+                              <Loader2 className="w-5 h-5 animate-spin" />
+                              인증 중...
+                            </>
+                          ) : (
+                            "LG U+ 회원 인증하기"
+                          )}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         )}
       </div>
@@ -584,6 +1159,17 @@ const MyPage: React.FC = () => {
               loadBookmarks();
             }
           }}
+        />
+      )}
+
+      {/* 구독 해지 확인 모달 */}
+      {showCancelModal && (
+        <ConfirmModal
+          message="정말 구독을 해지하시겠습니까? 만료일까지는 계속 이용 가능합니다."
+          confirmText="해지"
+          cancelText="취소"
+          onConfirm={handleCancel}
+          onCancel={() => setShowCancelModal(false)}
         />
       )}
     </div>

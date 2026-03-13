@@ -36,6 +36,10 @@ export interface Content {
   // 인기 차트 필드
   rank?: number;
   trendingScore?: number;
+  // 상세 정보 (description 객체에서 추출)
+  director?: string;
+  actor?: string;
+  releaseDate?: string;
 }
 
 export interface Episode {

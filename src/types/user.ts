@@ -9,6 +9,7 @@ export interface User {
   preferredTags: string[];
   subscriptionType: SubscriptionType;
   isLGUPlus: boolean;
+  paid: boolean;
   joinDate: string;
   password?: string;
 }

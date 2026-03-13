@@ -131,6 +131,7 @@ export const authService = {
           subscriptionType:
             profile.subscriptionStatus === "SUBSCRIBED" ? "basic" : "none",
           isLGUPlus: profile.isUPlusMember || false,
+          paid: profile.subscriptionStatus === "SUBSCRIBED",
           joinDate: profile.createdAt,
         };
 
@@ -146,6 +147,7 @@ export const authService = {
           preferredTags: [],
           subscriptionType: "basic",
           isLGUPlus: false,
+          paid: false,
           joinDate: new Date().toISOString(),
         };
         localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
@@ -195,6 +197,7 @@ export const authService = {
       preferredTags: tagIds.map((id) => id.toString()), // tagIds를 문자열 배열로 변환
       subscriptionType: "basic",
       isLGUPlus: false,
+      paid: false,
       joinDate: new Date().toISOString(),
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
@@ -317,6 +320,7 @@ export const authService = {
             preferredTags: [],
             subscriptionType: "basic",
             isLGUPlus: false,
+            paid: false,
             joinDate: new Date().toISOString(),
           };
           localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
@@ -335,6 +339,7 @@ export const authService = {
             preferredTags: [],
             subscriptionType: "basic",
             isLGUPlus: false,
+            paid: false,
             joinDate: new Date().toISOString(),
           };
           localStorage.setItem(STORAGE_KEY, JSON.stringify(user));

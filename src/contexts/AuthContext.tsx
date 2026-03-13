@@ -79,7 +79,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
 
   const subscribe = async (subscriptionType: "basic" | "premium") => {
     if (!user) return;
-    const updatedUser = { ...user, subscriptionType };
+    const updatedUser = { ...user, subscriptionType, paid: true };
     localStorage.setItem("ott_current_user", JSON.stringify(updatedUser));
     setUser(updatedUser);
   };
