@@ -1,3 +1,4 @@
+// adminService.ts - 관리자 관련 API 서비스
 import apiClient from "./apiClient";
 import type {
   AdminUser,
@@ -42,6 +43,16 @@ export interface AdminContentUpdateRequest {
   tagIds?: number[];
   accessLevel?: string;
   status?: string;
+export interface HomeTagStatItem {
+  statDate: string;
+  tagId: number;
+  tagName: string;
+  totalViewCount: number;
+  totalBookmarkCount: number;
+  bookmarkRate: number;
+  totalWatchCount: number;
+  completedWatchCount: number;
+  completionRate: number;
 }
 
 export const adminService = {
@@ -241,5 +252,11 @@ export const adminService = {
       },
     );
     return response.data;
+  // 홈 노출 태그(priority=1) 통계 조회
+  getHomeTagStats: async (statDate: string): Promise<HomeTagStatItem[]> => {
+    const response = await apiClient.get("/admin/stats/home-tags", {
+      params: { statDate },
+    });
+    return response.data.data;
   },
 };
