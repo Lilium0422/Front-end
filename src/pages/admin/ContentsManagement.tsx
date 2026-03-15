@@ -166,44 +166,6 @@ const ContentsManagement: React.FC<{
     }
   };
 
-  const handleEditStart = () => {
-    if (!selectedContent) return;
-    // description이 JSON 문자열일 수 있으므로 파싱
-    let summary = selectedContent.description || "";
-    let director = "";
-    let actor = "";
-    let releaseDate = "";
-    try {
-      const parsed = JSON.parse(selectedContent.description);
-      summary = parsed.summary || parsed.description || "";
-      director = parsed.director || "";
-      actor = parsed.actor || "";
-      releaseDate = parsed.release || "";
-    } catch {
-      // JSON이 아니면 그대로 사용
-    }
-    setEditForm({
-      title: selectedContent.title,
-      description: summary,
-      director,
-      actor,
-      releaseDate,
-      accessLevel: selectedContent.accessLevel,
-      status: selectedContent.status,
-      tagIds: selectedContent.tags.map((t) => t.tagId),
-    });
-    setEditEpisodes(
-      selectedContent.episodes.map((ep) => ({
-        videoId: ep.videoId,
-        episodeNo: ep.episodeNo,
-        title: ep.title,
-        description: ep.description,
-      })),
-    );
-    setNewEpisodeFiles([]);
-    setEditMode(true);
-  };
-
   const handleEditSave = async () => {
     if (!selectedContent) return;
     try {
