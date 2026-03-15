@@ -648,7 +648,9 @@ const MyPage: React.FC = () => {
               <div className="flex justify-center mb-6">
                 <div className="relative">
                   <div className="w-32 h-32 rounded-full bg-gray-800 flex items-center justify-center overflow-hidden">
-                    {profile.profileImageUrl ? (
+                    {profile.profileImageUrl &&
+                    profile.profileImageUrl !== "null" &&
+                    profile.profileImageUrl.startsWith("http") ? (
                       <img
                         src={profile.profileImageUrl}
                         alt="프로필"
