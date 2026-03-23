@@ -100,7 +100,7 @@ const Header: React.FC = () => {
                     {user.subscriptionType !== "none" && (
                       <span className="hidden md:inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-primary text-white">
                         {user.subscriptionType === "premium"
-                          ? "프리미엄"
+                          ? "LG U+ 인증"
                           : "베이직"}
                       </span>
                     )}

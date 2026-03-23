@@ -131,8 +131,11 @@ export const authService = {
           nickname: profile.nickname,
           profileImageUrl: profile.profileImageUrl || null,
           preferredTags: profile.preferredTags.map((tag: any) => tag.name),
-          subscriptionType:
-            profile.subscriptionStatus === "SUBSCRIBED" ? "basic" : "none",
+          subscriptionType: profile.isUPlusMember
+            ? "premium"
+            : profile.subscriptionStatus === "SUBSCRIBED"
+              ? "basic"
+              : "none",
           isLGUPlus: profile.isUPlusMember || false,
           paid: profile.subscriptionStatus === "SUBSCRIBED",
           joinDate: profile.createdAt,
@@ -366,8 +369,11 @@ export const authService = {
               params: { userId },
             });
             const profile = profileResponse.data.data;
-            subscriptionType =
-              profile.subscriptionStatus === "SUBSCRIBED" ? "basic" : "none";
+            subscriptionType = profile.isUPlusMember
+              ? "premium"
+              : profile.subscriptionStatus === "SUBSCRIBED"
+                ? "basic"
+                : "none";
             isLGUPlus = profile.isUPlusMember || false;
             paid = profile.subscriptionStatus === "SUBSCRIBED";
             nickname = profile.nickname || nickname;
